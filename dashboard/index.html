@@ -1,15 +1,184 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Launch Radar: Pre-Token Protocols Ranked by Implied Value</title>
-<link rel="stylesheet" href="app.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token Launch Radar - Early Pre-Token Alpha</title>
+  <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<a class="skip" href="#board">Skip to the board</a>
-<main id="board" tabindex="-1" aria-busy="true"></main>
-<script src="../data.js"></script>
-<script src="app.js"></script>
+  <div class="app-layout">
+    <header class="app-header">
+      <div class="header-branding">
+        <div class="logo-mark">⚡</div>
+        <div class="branding-text">
+          <h1>TOKEN RADAR <span class="badge-live">LIVE RADAR</span></h1>
+          <p class="tagline">Next-Generation Crypto Airdrop Aggregator & Pre-Token Valuation Engine</p>
+        </div>
+      </div>
+      <div class="header-stats" id="headerStats">
+        <div class="stat-card">
+          <span class="stat-label">PRE-TOKEN TARGETS</span>
+          <span class="stat-value" id="statTotalTargets">--</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">WATCHLIST COVERAGE</span>
+          <span class="stat-value text-emerald" id="statWatchlist">100%</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">IMPLIED MARKET CAP</span>
+          <span class="stat-value text-cyan" id="statTotalValuation">--</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">AVG FARMING GAS</span>
+          <span class="stat-value text-amber" id="statAvgGas">--</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="controls-panel">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search protocol, slug, category, chain..." autocomplete="off">
+        <button id="clearSearchBtn" class="clear-btn" title="Clear search">✕</button>
+      </div>
+
+      <div class="filter-group">
+        <div class="select-wrapper">
+          <label for="categoryFilter">CATEGORY</label>
+          <select id="categoryFilter">
+            <option value="ALL">All Categories</option>
+            <option value="DEX">DEXs & AMM</option>
+            <option value="LENDING">Lending & Borrowing</option>
+            <option value="PERPS">Perpetuals & Derivatives</option>
+            <option value="RESTAKING">Restaking & Liquid Staking</option>
+            <option value="AI">AI & DePIN Compute</option>
+            <option value="RWA">Real World Assets (RWA)</option>
+          </select>
+        </div>
+
+        <div class="select-wrapper">
+          <label for="chainFilter">CHAIN</label>
+          <select id="chainFilter">
+            <option value="ALL">All Chains</option>
+            <option value="Ethereum">Ethereum</option>
+            <option value="Solana">Solana</option>
+            <option value="Base">Base</option>
+            <option value="Arbitrum">Arbitrum</option>
+            <option value="Sui">Sui</option>
+            <option value="Avalanche">Avalanche</option>
+          </select>
+        </div>
+
+        <div class="select-wrapper">
+          <label for="sortFilter">SORT BY</label>
+          <select id="sortFilter">
+            <option value="implied_desc">Implied Value (High → Low)</option>
+            <option value="rank_asc">Rank (1 → 200)</option>
+            <option value="tvl_desc">TVL USD (High → Low)</option>
+            <option value="growth_desc">7d Growth (Highest First)</option>
+            <option value="score_desc">Alpha Score (Highest First)</option>
+            <option value="gas_asc">Gas Cost (Lowest First)</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <main class="table-container">
+      <table class="radar-table" id="radarTable">
+        <thead>
+          <tr>
+            <th class="col-rank">RANK</th>
+            <th class="col-protocol">PROTOCOL</th>
+            <th class="col-category">CATEGORY</th>
+            <th class="col-chains">CHAINS</th>
+            <th class="col-tvl text-right">TVL (USD)</th>
+            <th class="col-growth text-right">7D CHANGE</th>
+            <th class="col-implied text-right">IMPLIED VALUATION</th>
+            <th class="col-score text-center">SCORE</th>
+            <th class="col-gas text-right">EST. GAS</th>
+            <th class="col-action text-center">ACTION</th>
+          </tr>
+        </thead>
+        <tbody id="radarTableBody">
+          <!-- Dynamically populated via app.js -->
+        </tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display: none;">
+        <p class="empty-title">No protocols match your active filters.</p>
+        <button id="resetFiltersBtn" class="action-btn">Reset All Filters</button>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span>TOKEN RADAR // Autonomous DeFi Pre-Token Intelligence Engine</span>
+        <span class="snapshot-tag" id="footerSnapshotDate">As of Snapshot: 2026-11-14</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Protocol Detail Modal -->
+  <div class="modal-backdrop" id="modalBackdrop" style="display: none;">
+    <div class="modal-window" id="modalWindow">
+      <div class="modal-header">
+        <div class="modal-title-area">
+          <div class="modal-rank-badge" id="modalRank">#1</div>
+          <div>
+            <h2 id="modalName">Protocol Name</h2>
+            <div class="modal-meta-row" id="modalMetaRow">
+              <span class="meta-tag" id="modalCategory">DEX</span>
+              <span class="meta-tag" id="modalChains">Ethereum</span>
+              <span class="badge-watchlist" id="modalWatchlistBadge">WATCHLIST VERIFIED</span>
+            </div>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="modalCloseBtn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-metrics-grid">
+          <div class="metric-box">
+            <span class="metric-label">CURRENT TVL</span>
+            <span class="metric-val text-white" id="modalTvl">$0</span>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">7-DAY MOMENTUM</span>
+            <span class="metric-val" id="modalGrowth">0.0%</span>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">IMPLIED VALUATION</span>
+            <span class="metric-val text-cyan" id="modalImplied">$0</span>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">ALPHA SCORE</span>
+            <span class="metric-val text-emerald" id="modalScore">95/100</span>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">BACKING & TIER</span>
+            <span class="metric-val text-amber" id="modalBacking">Tier 1</span>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">EST. TRANSACTION GAS</span>
+            <span class="metric-val text-violet" id="modalGas">$0.00</span>
+          </div>
+        </div>
+
+        <div class="farm-plan-section">
+          <div class="farm-plan-header">
+            <h3>FARMING BLUEPRINT & REPUTATION STRATEGY</h3>
+            <span class="steps-count" id="modalStepsCount">4 Steps Required</span>
+          </div>
+          <p class="farm-intro">Execute the following on-chain actions to optimize allocation weighting ahead of the protocol token generation event (TGE).</p>
+          <div class="farm-steps-list" id="modalFarmSteps">
+            <!-- Dynamically populated farm steps -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js" defer></script>
 </body>
 </html>
