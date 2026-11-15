@@ -291,21 +291,95 @@ function holdDaysFor(age: number | null): number {
   return 30;
 }
 
+/** Chain-aware gas fee estimation for realistic farm plans. */
+function gasCostFor(chain: string, capital: number): { setupGas: string; weeklyGas: string; walletGas: string } {
+  const c = chain.toLowerCase();
+  if (c.includes('solana') || c.includes('sol')) {
+    return {
+      setupGas: 'under $0.05 in SOL fees',
+      weeklyGas: 'under $0.02 in SOL weekly',
+      walletGas: 'under $0.02 in SOL',
+    };
+  }
+  if (
+    c.includes('arbitrum') ||
+    c.includes('base') ||
+    c.includes('optimism') ||
+    c.includes('polygon') ||
+    c.includes('bsc') ||
+    c.includes('avalanche') ||
+    c.includes('scroll') ||
+    c.includes('linea') ||
+    c.includes('blast') ||
+    c.includes('zksync') ||
+    c.includes('mantle') ||
+    c.includes('mode')
+  ) {
+    return {
+      setupGas: 'about $0.20 to $0.50 of L2 gas',
+      weeklyGas: 'about $0.15 of L2 gas weekly',
+      walletGas: 'under $0.20 of L2 gas',
+    };
+  }
+  if (c.includes('sui') || c.includes('aptos') || c.includes('near') || c.includes('sei') || c.includes('injective')) {
+    return {
+      setupGas: 'under $0.05 in native network fees',
+      weeklyGas: 'under $0.02 weekly',
+      walletGas: 'under $0.02',
+    };
+  }
+  if (c.includes('bitcoin') || c.includes('btc') || c.includes('lightning') || c.includes('stacks')) {
+    return {
+      setupGas: '$2 to $5 in miner fees',
+      weeklyGas: '$1 to $3 in miner fees weekly',
+      walletGas: '$1 in miner fees',
+    };
+  }
+  return {
+    setupGas: capital >= 150 ? 'about $8 to $16 of mainnet gas' : 'about $4 to $8 of mainnet gas',
+    weeklyGas: 'about $2 to $5 of gas weekly',
+    walletGas: 'under $3 of gas',
+  };
+}
+
 /** The category's one action, in the words a farmer can follow. */
 function actionFor(p: SnapshotProtocol, capital: number, chain: string): string {
   const c = (p.category ?? '').toLowerCase();
   const name = p.name;
-  if (c.includes('lend') || c.includes('cdp') || c.includes('collateral')) return `Supply $${capital} of USDC to ${name} on ${chain} and keep the position open.`;
-  if (c.includes('dex') || c.includes('yield') || c.includes('leveraged farm')) return `Provide $${capital} of liquidity to ${name}'s main pool on ${chain} and keep the position open.`;
-  if (c.includes('bridge')) return `Bridge $${capital} of USDC to ${chain} through ${name} and use the bridged funds in its app.`;
-  if (c.includes('staking') || c.includes('restak')) return `Stake $${capital} of the chain's staking asset through ${name} and keep the receipt.`;
-  if (c.includes('perpetual') || c.includes('derivative')) return `Deposit $${capital} of USDC as margin on ${name} and open one small hedge.`;
-  if (c.includes('prediction')) return `Fund $${capital} and place one market position on ${name}.`;
-  if (c.includes('curator') || c.includes('allocator')) return `Deposit $${capital} into a ${name} vault on ${chain} and keep the shares.`;
-  if (c.includes('stable')) return `Mint or deposit $${capital} of the stable asset through ${name} on ${chain}.`;
-  if (c.includes('rwa')) return `Mint $${capital} of the protocol's yield asset on ${chain} and hold it.`;
-  if (c.includes('insurance')) return `Buy $${capital} of cover from ${name} on ${chain} and keep the policy.`;
-  return `Deposit $${capital} of USDC into ${name} on ${chain} and keep the position open.`;
+  if (c.includes('lend') || c.includes('cdp') || c.includes('collateral')) {
+    return `Supply $${capital} in USDC or primary collateral on ${name} (${chain}), maintain conservative borrowing with health factor above 1.8, and accrue lending points.`;
+  }
+  if (c.includes('dex') || c.includes('yield') || c.includes('leveraged farm')) {
+    return `Provide $${capital} in concentrated or two-sided liquidity to ${name}'s flagship pool on ${chain}, execute bi-weekly volume swaps, and hold the LP receipt.`;
+  }
+  if (c.includes('bridge') || c.includes('cross chain')) {
+    return `Bridge $${capital} in USDC to ${chain} via ${name}, deploy the bridged assets into integrated protocols, and retain the bridge transaction proofs.`;
+  }
+  if (c.includes('staking') || c.includes('restak')) {
+    return `Stake $${capital} of the chain's liquid staking asset through ${name} on ${chain}, maintain the position across active epochs, and retain the receipt tokens.`;
+  }
+  if (c.includes('perpetual') || c.includes('derivative')) {
+    return `Deposit $${capital} in USDC margin on ${name} (${chain}), open delta-neutral hedge orders to generate eligible trading volume, and avoid directional exposure.`;
+  }
+  if (c.includes('prediction')) {
+    return `Fund $${capital} and establish split positions across high-volume prediction markets on ${name} (${chain}) to register active user activity.`;
+  }
+  if (c.includes('curator') || c.includes('allocator')) {
+    return `Deposit $${capital} into an automated ${name} vault on ${chain}, hold the vault shares, and track the vault's yield performance tiers.`;
+  }
+  if (c.includes('stable')) {
+    return `Mint or deposit $${capital} of native stablecoin via ${name} on ${chain}, stake in the stability pool, and collect protocol rewards.`;
+  }
+  if (c.includes('ai') || c.includes('depin')) {
+    return `Stake $${capital} into ${name} on ${chain}, register telemetry as an active node participant, and maintain uptime heartbeats for network points.`;
+  }
+  if (c.includes('rwa')) {
+    return `Mint $${capital} of the protocol's real-world yield asset on ${chain}, verify whitelist eligibility, and retain custody in your self-custody wallet.`;
+  }
+  if (c.includes('insurance')) {
+    return `Underwrite or purchase $${capital} in smart contract cover from ${name} on ${chain} and hold the active policy coverage.`;
+  }
+  return `Deposit $${capital} of USDC into ${name} on ${chain}, maintain continuous contract interaction, and keep the position open.`;
 }
 
 /**
@@ -317,38 +391,43 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const capital = capitalFor(p);
   const hold = holdDaysFor(age);
   const action = actionFor(p, capital, chain);
+  const gas = gasCostFor(chain, capital);
   return [
     {
-      text: `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.`,
-      cost: 'under $3 of gas for the first transaction',
+      text: `Use a dedicated, clean wallet containing only the allocated $${capital} farming capital, and keep private keys strictly offline.`,
+      cost: gas.walletGas,
       time: '5 minutes',
     },
     {
       text: action,
-      cost: `$${capital} of capital and about $${capital >= 150 ? 8 : 4} of gas`,
+      cost: `$${capital} capital plus ${gas.setupGas}`,
       time: '15 minutes to set up',
     },
     {
-      text: `Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote.`,
-      cost: 'about $2 of gas a week',
+      text: `Execute one organic on-chain interaction every 7 to 10 days (such as a deposit, small swap, or vote) to avoid sybil-filter disqualification.`,
+      cost: gas.weeklyGas,
       time: '10 minutes a week',
     },
     {
-      text: `Hold the position for at least ${hold} days so the activity is counted in more than one snapshot.`,
-      cost: `the $${capital} stays in the position`,
+      text: `Maintain the continuous deposited position for at least ${hold} days to ensure inclusion across multiple protocol snapshot epochs.`,
+      cost: `the $${capital} remains committed in the contract`,
       time: `${hold} days`,
     },
     {
-      text: `Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.`,
-      cost: 'no fee to check, and never pay to claim',
+      text: `Regularly audit your qualifying points or leaderboard tier via ${nameOrProtocol(p)}'s verified official interface, and verify allocation status prior to TGE.`,
+      cost: 'zero claim fees, never pay third-party claimers',
       time: '10 minutes',
     },
     {
-      text: `Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.`,
+      text: `Document transaction signatures, wallet addresses, and deposit dates in a secure offline farm ledger before executing position withdrawal.`,
       cost: 'nothing but the log',
       time: '5 minutes',
     },
   ];
+}
+
+function nameOrProtocol(p: SnapshotProtocol): string {
+  return p.name.length > 0 ? p.name : 'the protocol';
 }
 
 /** The live-token protocols, by market cap, for the dashboard's Live token view. */
