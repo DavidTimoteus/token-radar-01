@@ -1,340 +1,244 @@
-/**
- * Token Launch Radar - Frontend Application Logic
- * 100% Offline Vanilla JS - Reads window.RADAR_DATA
- */
+(() => {
+  const data = window.RADAR_DATA;
+  if (!data || !Array.isArray(data.rows)) return;
+  const st = { view: 'radar', search: '', category: '', chain: '', sort: 'implied', watchlistOnly: false };
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    pillDate: $('pillSnapshotDate'), pillWl: $('pillWatchlist'),
+    kpiWl: $('kpiWatchlist'), kpiWlSub: $('kpiWatchlistSub'),
+    kpiUniv: $('kpiUniverse'), kpiUnivSub: $('kpiUniverseSub'),
+    kpiImp: $('kpiImplied'), kpiTvl: $('kpiTvl'), kpiTvlSub: $('kpiTvlSub'),
+    tabRadar: $('tabRadar'), tabLive: $('tabLive'),
+    tabRadarCount: $('tabRadarCount'), tabLiveCount: $('tabLiveCount'),
+    search: $('searchInput'), category: $('categorySelect'),
+    chain: $('chainSelect'), sort: $('sortSelect'),
+    chips: $('quickChips'), wlChip: $('watchlistChip'), resetBtn: $('resetBtn'),
+    banner: $('activeFilterBanner'), bannerText: $('activeFilterText'), bannerClear: $('bannerClearBtn'),
+    benchNote: $('benchmarkNote'), thead: $('tableHead'), tbody: $('tableBody'),
+    empty: $('emptyState'), footerSrc: $('footerSource'),
+    modal: $('detailModal'), modalTitle: $('modalTitle'),
+    modalChains: $('modalChains'), modalBody: $('modalBody'), modalClose: $('modalCloseBtn'),
+  };
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const fmtUsd = (n) => {
+    if (n == null || !Number.isFinite(n)) return '--';
+    const a = Math.abs(n);
+    if (a >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+    if (a >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+    if (a >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+    return `$${Math.round(n).toLocaleString('en-US')}`;
+  };
+  const fmtFull = (n) => (n == null || !Number.isFinite(n) ? '--' : `$${Math.round(n).toLocaleString('en-US')}`);
+  const fmtPct = (v) => {
+    if (v == null || !Number.isFinite(v)) return '<span class="flat">N/A</span>';
+    const cls = v > 0.01 ? 'pos' : v < -0.01 ? 'neg' : 'flat';
+    return `<span class="${cls}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
+  };
+  const fmtAge = (d) => `${d}d <span class="age-sub">${(d / 365).toFixed(1)}y</span>`;
 
-(function () {
-  'use strict';
-
-  // State Management
-  let allRows = [];
-  let boardMeta = null;
-  let activeModalRow = null;
-
-  // DOM Elements
-  const searchInput = document.getElementById('searchInput');
-  const clearSearchBtn = document.getElementById('clearSearchBtn');
-  const categoryFilter = document.getElementById('categoryFilter');
-  const chainFilter = document.getElementById('chainFilter');
-  const sortFilter = document.getElementById('sortFilter');
-  const radarTableBody = document.getElementById('radarTableBody');
-  const emptyState = document.getElementById('emptyState');
-  const resetFiltersBtn = document.getElementById('resetFiltersBtn');
-
-  // Header Stats Elements
-  const statTotalTargets = document.getElementById('statTotalTargets');
-  const statWatchlist = document.getElementById('statWatchlist');
-  const statTotalValuation = document.getElementById('statTotalValuation');
-  const statAvgGas = document.getElementById('statAvgGas');
-  const footerSnapshotDate = document.getElementById('footerSnapshotDate');
-
-  // Modal Elements
-  const modalBackdrop = document.getElementById('modalBackdrop');
-  const modalCloseBtn = document.getElementById('modalCloseBtn');
-  const modalRank = document.getElementById('modalRank');
-  const modalName = document.getElementById('modalName');
-  const modalCategory = document.getElementById('modalCategory');
-  const modalChains = document.getElementById('modalChains');
-  const modalWatchlistBadge = document.getElementById('modalWatchlistBadge');
-  const modalTvl = document.getElementById('modalTvl');
-  const modalGrowth = document.getElementById('modalGrowth');
-  const modalImplied = document.getElementById('modalImplied');
-  const modalScore = document.getElementById('modalScore');
-  const modalBacking = document.getElementById('modalBacking');
-  const modalGas = document.getElementById('modalGas');
-  const modalStepsCount = document.getElementById('modalStepsCount');
-  const modalFarmSteps = document.getElementById('modalFarmSteps');
-
-  // Currency & Number Formatters
-  function formatUsd(amount) {
-    if (amount == null || isNaN(amount)) return '$0';
-    const val = Number(amount);
-    if (val >= 1e12) return '$' + (val / 1e12).toFixed(2) + 'T';
-    if (val >= 1e9) return '$' + (val / 1e9).toFixed(2) + 'B';
-    if (val >= 1e6) return '$' + (val / 1e6).toFixed(1) + 'M';
-    if (val >= 1e3) return '$' + (val / 1e3).toFixed(0) + 'K';
-    return '$' + val.toLocaleString('en-US');
-  }
-
-  function formatPercent(pct) {
-    if (pct == null || isNaN(pct)) return '0.0%';
-    const val = Number(pct);
-    const sign = val > 0 ? '+' : '';
-    return sign + val.toFixed(1) + '%';
-  }
-
-  // Load Data Source
-  function initData() {
-    if (window.RADAR_DATA && Array.isArray(window.RADAR_DATA.rows)) {
-      boardMeta = window.RADAR_DATA;
-      allRows = window.RADAR_DATA.rows;
-      renderApp();
-    } else {
-      // Fallback local fetch for board.json
-      fetch('../board.json')
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (data && Array.isArray(data.rows)) {
-            boardMeta = data;
-            allRows = data.rows;
-            renderApp();
-          }
-        })
-        .catch(function (err) {
-          console.error('Failed to load local radar data:', err);
-        });
+  function initHeader() {
+    const s = data.summary;
+    els.pillDate.textContent = s.as_of;
+    els.pillWl.textContent = `${s.watchlist_covered} / ${s.watchlist_total}`;
+    els.kpiWl.textContent = `${s.watchlist_covered} / ${s.watchlist_total}`;
+    els.kpiWlSub.textContent = `100% of floor >= ${fmtUsd(s.floor_usd)} watchlist`;
+    els.kpiUniv.textContent = String(data.rows.length);
+    els.kpiUnivSub.textContent = `From ${s.pre_token_universe_count} pre-token records (${s.total_snapshot_protocols} total)`;
+    els.kpiImp.textContent = fmtUsd(s.aggregate_implied_usd);
+    els.kpiTvl.textContent = fmtUsd(s.aggregate_tvl_usd);
+    els.kpiTvlSub.textContent = `${s.top_chains.length} tracked chains · ${s.top_categories.length} sectors`;
+    els.tabRadarCount.textContent = String(data.rows.length);
+    els.tabLiveCount.textContent = String(data.liveTokens.length);
+    els.footerSrc.textContent = `${s.source} · Snapshot floor ${fmtUsd(s.floor_usd)}`;
+    for (const c of s.top_categories) {
+      const o = document.createElement('option');
+      o.value = c.name;
+      o.textContent = `${c.name} (${c.count})`;
+      els.category.appendChild(o);
+    }
+    for (const ch of s.top_chains) {
+      const o = document.createElement('option');
+      o.value = ch.name;
+      o.textContent = `${ch.name} (${ch.count})`;
+      els.chain.appendChild(o);
     }
   }
 
-  function renderApp() {
-    updateHeaderStats();
-    applyFiltersAndRender();
-  }
-
-  function updateHeaderStats() {
-    if (!boardMeta || !allRows.length) return;
-
-    statTotalTargets.textContent = allRows.length.toString();
-    const wlCount = allRows.filter(function (r) { return r.is_watchlist; }).length;
-    statWatchlist.textContent = wlCount + ' / 40 (100%)';
-
-    const totalVal = allRows.reduce(function (sum, r) { return sum + (r.implied_value_usd || 0); }, 0);
-    statTotalValuation.textContent = formatUsd(totalVal);
-
-    const avgGas = allRows.reduce(function (sum, r) { return sum + (r.gas_estimate_usd || 0.35); }, 0) / allRows.length;
-    statAvgGas.textContent = '$' + avgGas.toFixed(2);
-
-    if (boardMeta.as_of && footerSnapshotDate) {
-      footerSnapshotDate.textContent = 'As of Snapshot: ' + boardMeta.as_of;
-    }
-  }
-
-  function getFilteredAndSortedRows() {
-    const searchVal = (searchInput.value || '').trim().toLowerCase();
-    const catVal = categoryFilter.value;
-    const chainVal = chainFilter.value;
-    const sortVal = sortFilter.value;
-
-    let filtered = allRows.filter(function (r) {
-      // Search term
-      if (searchVal) {
-        const matchName = (r.name || '').toLowerCase().includes(searchVal);
-        const matchSlug = (r.slug || '').toLowerCase().includes(searchVal);
-        const matchCat = (r.category || '').toLowerCase().includes(searchVal);
-        const matchChains = (r.chains || []).some(function (c) { return c.toLowerCase().includes(searchVal); });
-        if (!matchName && !matchSlug && !matchCat && !matchChains) return false;
-      }
-
-      // Category filter
-      if (catVal !== 'ALL') {
-        const cat = (r.category || '').toLowerCase();
-        if (catVal === 'DEX' && !cat.includes('dex') && !cat.includes('amm')) return false;
-        if (catVal === 'LENDING' && !cat.includes('lend') && !cat.includes('borrow')) return false;
-        if (catVal === 'PERPS' && !cat.includes('perp') && !cat.includes('derivative')) return false;
-        if (catVal === 'RESTAKING' && !cat.includes('restak') && !cat.includes('liquid')) return false;
-        if (catVal === 'AI' && !cat.includes('ai') && !cat.includes('depin') && !cat.includes('compute')) return false;
-        if (catVal === 'RWA' && !cat.includes('rwa') && !cat.includes('real')) return false;
-      }
-
-      // Chain filter
-      if (chainVal !== 'ALL') {
-        const hasChain = (r.chains || []).some(function (c) {
-          return c.toLowerCase().includes(chainVal.toLowerCase());
-        });
-        if (!hasChain) return false;
-      }
-
-      return true;
+  function filteredRadar() {
+    const q = st.search.trim().toLowerCase();
+    const out = data.rows.filter((r) => {
+      if (st.watchlistOnly && !r.in_watchlist) return false;
+      if (st.category && r.category !== st.category) return false;
+      if (st.chain && !r.chains.includes(st.chain)) return false;
+      return !q || `${r.name} ${r.slug} ${r.category} ${r.chains.join(' ')}`.toLowerCase().includes(q);
     });
-
-    // Sorting
-    filtered.sort(function (a, b) {
-      if (sortVal === 'implied_desc') return (b.implied_value_usd || 0) - (a.implied_value_usd || 0);
-      if (sortVal === 'rank_asc') return (a.rank || 0) - (b.rank || 0);
-      if (sortVal === 'tvl_desc') return (b.tvl_usd || 0) - (a.tvl_usd || 0);
-      if (sortVal === 'growth_desc') return (b.change_7d || 0) - (a.change_7d || 0);
-      if (sortVal === 'score_desc') return (b.score || 0) - (a.score || 0);
-      if (sortVal === 'gas_asc') return (a.gas_estimate_usd || 0) - (b.gas_estimate_usd || 0);
-      return 0;
+    out.sort((a, b) => {
+      if (st.sort === 'tvl') return b.tvl_usd - a.tvl_usd || a.rank - b.rank;
+      if (st.sort === 'growth') return (b.change_7d ?? -9999) - (a.change_7d ?? -9999) || a.rank - b.rank;
+      if (st.sort === 'age') return b.age_days - a.age_days || a.rank - b.rank;
+      if (st.sort === 'gas') return a.est_gas_usd - b.est_gas_usd || a.rank - b.rank;
+      return a.rank - b.rank;
     });
-
-    return filtered;
+    return out;
   }
 
-  function applyFiltersAndRender() {
-    const rows = getFilteredAndSortedRows();
-    radarTableBody.innerHTML = '';
+  function filteredLive() {
+    const q = st.search.trim().toLowerCase();
+    return data.liveTokens.filter((t) => {
+      if (st.category && t.category !== st.category) return false;
+      if (st.chain && !t.chains.includes(st.chain)) return false;
+      return !q || `${t.name} ${t.symbol} ${t.slug} ${t.category} ${t.chains.join(' ')}`.toLowerCase().includes(q);
+    });
+  }
 
-    if (rows.length === 0) {
-      emptyState.style.display = 'block';
+  function renderBanner(list) {
+    const parts = [];
+    if (st.chain) parts.push(`Chain = ${st.chain}`);
+    if (st.category) parts.push(`Sector = ${st.category}`);
+    if (st.watchlistOnly) parts.push('Watchlist Only');
+    if (st.search.trim()) parts.push(`Query = "${st.search.trim()}"`);
+    if (!parts.length) { els.banner.hidden = true; return; }
+    const total = st.view === 'radar' ? data.rows.length : data.liveTokens.length;
+    const sum = st.view === 'radar'
+      ? list.reduce((a, r) => a + r.implied_value_usd, 0)
+      : list.reduce((a, t) => a + t.mcap_usd, 0);
+    const lbl = st.view === 'radar' ? 'Implied Value' : 'Market Cap';
+    els.bannerText.textContent = `Filter Active: ${parts.join(' · ')} · Showing ${list.length} of ${total} · Aggregate ${lbl}: ${fmtUsd(sum)}`;
+    els.banner.hidden = false;
+  }
+
+  function renderTable() {
+    for (const b of els.chips.querySelectorAll('.chip[data-chain]')) b.classList.toggle('active', (b.dataset.chain || '') === st.chain);
+    els.wlChip.classList.toggle('active', st.watchlistOnly);
+    els.chain.value = st.chain;
+    els.category.value = st.category;
+    els.sort.value = st.sort;
+    els.tabRadar.classList.toggle('active', st.view === 'radar');
+    els.tabLive.classList.toggle('active', st.view === 'live');
+    els.tabRadar.setAttribute('aria-selected', String(st.view === 'radar'));
+    els.tabLive.setAttribute('aria-selected', String(st.view === 'live'));
+    els.benchNote.hidden = st.view !== 'live';
+    els.sort.disabled = st.view === 'live';
+
+    if (st.view === 'radar') {
+      els.thead.innerHTML = '<tr><th>Rank</th><th>Protocol</th><th class="num">TVL</th><th class="num">7d Change</th><th class="num">Tracked Age</th><th class="num">Implied Valuation</th><th class="num">Action</th></tr>';
+      const rows = filteredRadar();
+      renderBanner(rows);
+      els.empty.hidden = rows.length > 0;
+      const maxV = data.rows[0]?.implied_value_usd || 1;
+      els.tbody.innerHTML = rows.map((r) => {
+        const w = Math.max(4, Math.min(100, Math.round((Math.log10(r.implied_value_usd + 1) / Math.log10(maxV + 1)) * 100)));
+        const badge = r.in_watchlist ? '<span class="badge badge-wl">WATCHLIST</span>' : '<span class="badge badge-pre">PRE-TOKEN</span>';
+        const orderedChains = st.chain ? [st.chain, ...r.chains.filter((c) => c !== st.chain)] : r.chains;
+        const ch = orderedChains.slice(0, 3).map((c) => `<span class="chain-tag">${esc(c)}</span>`).join('');
+        const more = orderedChains.length > 3 ? `<span class="chain-tag">+${orderedChains.length - 3}</span>` : '';
+        return `<tr data-slug="${esc(r.slug)}"><td class="rank-cell ${r.rank <= 10 ? 'rank-top' : ''}">#${r.rank}</td><td><div class="proto-name-row"><span class="proto-name">${esc(r.name)}</span>${badge}</div><div class="proto-meta"><span class="cat-tag">${esc(r.category)}</span>${ch}${more}</div></td><td class="num">${fmtUsd(r.tvl_usd)}</td><td class="num">${fmtPct(r.change_7d)}</td><td class="num">${fmtAge(r.age_days)}</td><td class="num"><div class="val-box"><span class="val-main">${fmtUsd(r.implied_value_usd)}</span><span class="val-track"><span class="val-fill" style="width:${w}%"></span></span><span class="val-mult">${r.valuation.sector_mult.toFixed(2)}x sector · gas ~$${r.est_gas_usd.toFixed(2)}</span></div></td><td class="num"><button type="button" class="farm-pill-btn" data-slug="${esc(r.slug)}">Farm Plan &rarr;</button></td></tr>`;
+      }).join('');
       return;
     }
-    emptyState.style.display = 'none';
 
-    const fragment = document.createDocumentFragment();
-
-    rows.forEach(function (row) {
-      const tr = document.createElement('tr');
-
-      // Rank
-      const rankClass = row.rank <= 3 ? 'col-rank rank-top' : 'col-rank';
-      const rankHtml = '<td class="' + rankClass + '">#' + row.rank + '</td>';
-
-      // Protocol & Slug
-      const wlBadge = row.is_watchlist ? '<span class="badge-watchlist-sm">WATCHLIST</span>' : '';
-      const protoHtml = '<td class="col-protocol">' +
-        '<div class="proto-title-cell">' +
-          '<div class="proto-name-row">' +
-            '<span class="proto-name">' + escapeHtml(row.name) + '</span>' +
-            wlBadge +
-          '</div>' +
-          '<span class="proto-slug">' + escapeHtml(row.slug) + '</span>' +
-        '</div>' +
-      '</td>';
-
-      // Category
-      const catHtml = '<td class="col-category"><span class="category-tag">' + escapeHtml(row.category || 'DeFi') + '</span></td>';
-
-      // Chains
-      const chainPills = (row.chains || ['Ethereum']).slice(0, 3).map(function (c) {
-        return '<span class="chain-pill">' + escapeHtml(c) + '</span>';
-      }).join('');
-      const chainsHtml = '<td class="col-chains"><div class="chain-pills">' + chainPills + '</div></td>';
-
-      // TVL
-      const tvlHtml = '<td class="col-tvl text-right mono-num">' + formatUsd(row.tvl_usd) + '</td>';
-
-      // 7d Growth
-      let changeClass = 'change-neutral';
-      if (row.change_7d > 0.05) changeClass = 'change-positive';
-      else if (row.change_7d < -0.05) changeClass = 'change-negative';
-      const growthHtml = '<td class="col-growth text-right"><span class="change-pill ' + changeClass + '">' + formatPercent(row.change_7d) + '</span></td>';
-
-      // Implied Valuation
-      const impliedHtml = '<td class="col-implied text-right mono-num text-cyan">' + formatUsd(row.implied_value_usd) + '</td>';
-
-      // Score
-      const scoreHtml = '<td class="col-score text-center"><span class="score-badge">' + (row.score || 85) + '</span></td>';
-
-      // Est. Gas
-      const gasHtml = '<td class="col-gas text-right mono-num text-amber">$' + (row.gas_estimate_usd ? row.gas_estimate_usd.toFixed(2) : '0.25') + '</td>';
-
-      // Action
-      const actionHtml = '<td class="col-action text-center"><button class="action-btn" data-slug="' + escapeHtml(row.slug) + '">View Plan</button></td>';
-
-      tr.innerHTML = rankHtml + protoHtml + catHtml + chainsHtml + tvlHtml + growthHtml + impliedHtml + scoreHtml + gasHtml + actionHtml;
-
-      // Event listener for opening detail modal
-      tr.addEventListener('click', function (e) {
-        openModal(row);
-      });
-
-      fragment.appendChild(tr);
-    });
-
-    radarTableBody.appendChild(fragment);
+    els.thead.innerHTML = '<tr><th>Rank</th><th>Protocol</th><th class="num">Market Cap</th><th class="num">TVL</th><th class="num">MCap / TVL</th><th class="num">7d TVL</th><th class="num">Listed</th></tr>';
+    const live = filteredLive();
+    renderBanner(live);
+    els.empty.hidden = live.length > 0;
+    els.tbody.innerHTML = live.map((t) => {
+      const ch = t.chains.slice(0, 3).map((c) => `<span class="chain-tag">${esc(c)}</span>`).join('');
+      const ratio = t.mcap_to_tvl !== null ? `${t.mcap_to_tvl.toFixed(2)}x` : '--';
+      const rCls = t.mcap_to_tvl !== null && t.mcap_to_tvl >= 1 ? 'pos' : 'flat';
+      return `<tr><td class="rank-cell ${t.rank <= 10 ? 'rank-top' : ''}">#${t.rank}</td><td><div class="proto-name-row"><span class="proto-name">${esc(t.name)}</span><span class="badge badge-ticker">${esc(t.symbol)}</span></div><div class="proto-meta"><span class="cat-tag">${esc(t.category)}</span>${ch}</div></td><td class="num">${fmtUsd(t.mcap_usd)}</td><td class="num">${fmtUsd(t.tvl_usd)}</td><td class="num"><span class="${rCls}">${ratio}</span></td><td class="num">${fmtPct(t.change_7d)}</td><td class="num">${esc(t.listed_at || '--')}</td></tr>`;
+    }).join('');
   }
 
-  function openModal(row) {
-    activeModalRow = row;
+  function parseStep(txt) {
+    const m = txt.match(/\(Cost:\s*([^|]+)\|\s*Time:\s*([^)]+)\)/i);
+    return m ? { desc: txt.replace(m[0], '').trim(), cost: m[1].trim(), time: m[2].trim() } : { desc: txt, cost: 'Est. gas', time: '10 min setup' };
+  }
 
-    modalRank.textContent = '#' + row.rank;
-    modalName.textContent = row.name || row.slug;
-    modalCategory.textContent = row.category || 'DeFi';
-    modalChains.textContent = (row.chains || []).join(', ');
+  function openDetail(slug) {
+    const row = data.rows.find((r) => r.slug === slug);
+    if (!row) return;
+    const v = row.valuation;
+    const badge = row.in_watchlist ? '<span class="badge badge-wl">WATCHLIST</span>' : '<span class="badge badge-pre">PRE-TOKEN</span>';
+    els.modalTitle.innerHTML = `<span class="mono" style="color:var(--teal)">#${row.rank}</span> ${esc(row.name)} ${badge} <span class="cat-tag">${esc(row.category)}</span>`;
+    els.modalChains.innerHTML = row.chains.map((c) => `<span class="chain-tag">${esc(c)}</span>`).join('');
+    const benchTxt = v.live_sector_median_ratio !== null
+      ? `Conservative ${(v.sector_mult / Math.max(0.01, v.live_sector_median_ratio) * 100).toFixed(0)}% of live ${row.category} median (${v.live_sector_median_ratio.toFixed(2)}x)`
+      : 'Conservative 0.20x-0.36x sector cap';
+    const stepsHtml = row.farm_steps.map((s, i) => {
+      const m = row.step_meta && row.step_meta[i];
+      const p = parseStep(s);
+      return `<li class="step-item"><div class="step-num">${i + 1}</div><div class="step-content"><div class="step-desc">${esc(p.desc)}</div><div class="step-badges"><span class="meta-badge meta-cost">Cost: ${esc(m ? m.cost : p.cost)}</span><span class="meta-badge meta-time">Time: ${esc(m ? m.time : p.time)}</span></div></div></li>`;
+    }).join('');
 
-    if (row.is_watchlist) {
-      modalWatchlistBadge.style.display = 'inline-block';
-    } else {
-      modalWatchlistBadge.style.display = 'none';
-    }
+    els.modalBody.innerHTML = `<div class="modal-stats"><div class="m-stat"><div class="m-stat-k">Locked TVL</div><div class="m-stat-v">${fmtUsd(row.tvl_usd)}</div></div><div class="m-stat"><div class="m-stat-k">7d Velocity</div><div class="m-stat-v">${fmtPct(row.change_7d)}</div></div><div class="m-stat"><div class="m-stat-k">Tracked Age</div><div class="m-stat-v">${row.age_days}d (${(row.age_days / 365).toFixed(1)}y)</div></div><div class="m-stat"><div class="m-stat-k">Implied Value</div><div class="m-stat-v" style="color:var(--teal)">${fmtUsd(row.implied_value_usd)}</div></div></div><section class="panel"><div class="panel-head"><h3 class="panel-title">Implied Valuation Arithmetic</h3><span class="panel-sub">${esc(benchTxt)}</span></div><div class="arith-grid"><div class="arith-step"><div class="arith-k">1. Baseline TVL</div><div class="arith-v">${fmtFull(v.tvl_usd)}</div></div><div class="arith-step"><div class="arith-k">2. Sector Mult (${esc(row.category)})</div><div class="arith-v">&times; ${v.sector_mult.toFixed(3)}x</div></div><div class="arith-step"><div class="arith-k">3. 7d Velocity Mult</div><div class="arith-v">&times; ${v.velocity_mult.toFixed(3)}x</div></div><div class="arith-step"><div class="arith-k">4. Tracked Age Mult (${v.age_days}d)</div><div class="arith-v">&times; ${v.age_mult.toFixed(3)}x</div></div><div class="arith-step"><div class="arith-k">5. Chain Breadth (${row.chains.length} chains)</div><div class="arith-v">&times; ${v.chain_mult.toFixed(3)}x</div></div><div class="arith-step final"><div class="arith-k">= Final Implied Value</div><div class="arith-v" style="color:var(--teal)">${fmtFull(row.implied_value_usd)}</div></div></div><div class="arith-formula">${fmtFull(v.tvl_usd)} &times; ${v.sector_mult.toFixed(3)} &times; ${v.velocity_mult.toFixed(3)} &times; ${v.age_mult.toFixed(3)} &times; ${v.chain_mult.toFixed(3)} = ${fmtFull(row.implied_value_usd)}</div></section><section class="panel"><div class="panel-head"><h3 class="panel-title">Concrete Farming Plan</h3><span class="panel-sub">Total Est. Gas ~$${row.est_gas_usd.toFixed(2)} · Primary: ${esc(row.primary_chain)}</span></div><ol class="step-list">${stepsHtml}</ol></section>`;
 
-    modalTvl.textContent = formatUsd(row.tvl_usd);
-
-    const growthVal = row.change_7d || 0;
-    modalGrowth.textContent = formatPercent(growthVal);
-    modalGrowth.className = 'metric-val ' + (growthVal >= 0 ? 'text-emerald' : 'text-rose');
-
-    modalImplied.textContent = formatUsd(row.implied_value_usd);
-    modalScore.textContent = (row.score || 85) + ' / 100';
-    modalBacking.textContent = row.backing_tier || 'Tier 1';
-    modalGas.textContent = '$' + (row.gas_estimate_usd ? row.gas_estimate_usd.toFixed(2) : '0.35');
-
-    // Farm Steps
-    const steps = row.farm_steps || [];
-    modalStepsCount.textContent = steps.length + ' Steps Strategy';
-    modalFarmSteps.innerHTML = '';
-
-    steps.forEach(function (stepText, idx) {
-      const stepItem = document.createElement('div');
-      stepItem.className = 'farm-step-item';
-      stepItem.innerHTML =
-        '<div class="step-num-badge">' + (idx + 1) + '</div>' +
-        '<div class="step-text">' + escapeHtml(stepText) + '</div>';
-      modalFarmSteps.appendChild(stepItem);
-    });
-
-    modalBackdrop.style.display = 'flex';
+    if (typeof els.modal.showModal === 'function') { if (!els.modal.open) els.modal.showModal(); }
+    else els.modal.setAttribute('open', '');
   }
 
   function closeModal() {
-    modalBackdrop.style.display = 'none';
-    activeModalRow = null;
+    if (typeof els.modal.close === 'function' && els.modal.open) els.modal.close();
+    else els.modal.removeAttribute('open');
   }
 
-  function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  function applyHash() {
+    const h = window.location.hash.replace(/^#/, '');
+    if (!h) return;
+    const p = new URLSearchParams(h);
+    if (p.has('chain')) st.chain = p.get('chain') || '';
+    if (p.has('category')) st.category = p.get('category') || '';
+    if (p.has('watchlist')) st.watchlistOnly = p.get('watchlist') === '1';
+    if (p.has('view') && (p.get('view') === 'live' || p.get('view') === 'radar')) st.view = p.get('view');
+    const slug = p.get('protocol');
+    if (slug) requestAnimationFrame(() => openDetail(slug));
   }
 
-  // Setup Event Listeners
-  searchInput.addEventListener('input', function () {
-    clearSearchBtn.style.display = searchInput.value ? 'block' : 'none';
-    applyFiltersAndRender();
+  function syncUrlHash() {
+    const p = new URLSearchParams();
+    if (st.view === 'live') p.set('view', 'live');
+    if (st.chain) p.set('chain', st.chain);
+    if (st.category) p.set('category', st.category);
+    if (st.watchlistOnly) p.set('watchlist', '1');
+    const next = p.toString();
+    history.replaceState(null, '', next ? `#${next}` : window.location.pathname);
+  }
+
+  function resetAll() {
+    st.search = ''; st.category = ''; st.chain = ''; st.watchlistOnly = false; st.sort = 'implied';
+    els.search.value = '';
+    if (window.location.hash) history.replaceState(null, '', window.location.pathname);
+    renderTable();
+  }
+
+  els.tabRadar.addEventListener('click', () => { st.view = 'radar'; syncUrlHash(); renderTable(); });
+  els.tabLive.addEventListener('click', () => { st.view = 'live'; syncUrlHash(); renderTable(); });
+  els.search.addEventListener('input', (e) => { st.search = e.target.value; renderTable(); });
+  els.category.addEventListener('change', (e) => { st.category = e.target.value; syncUrlHash(); renderTable(); });
+  els.chain.addEventListener('change', (e) => { st.chain = e.target.value; syncUrlHash(); renderTable(); });
+  els.sort.addEventListener('change', (e) => { st.sort = e.target.value; renderTable(); });
+  els.chips.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b === els.wlChip) { st.watchlistOnly = !st.watchlistOnly; syncUrlHash(); renderTable(); return; }
+    if (b === els.resetBtn) { resetAll(); return; }
+    if (b.dataset.chain !== undefined) { st.chain = b.dataset.chain; syncUrlHash(); renderTable(); }
   });
-
-  clearSearchBtn.addEventListener('click', function () {
-    searchInput.value = '';
-    clearSearchBtn.style.display = 'none';
-    applyFiltersAndRender();
-    searchInput.focus();
+  els.bannerClear.addEventListener('click', resetAll);
+  els.tbody.addEventListener('click', (e) => {
+    const b = e.target.closest('.farm-pill-btn');
+    if (b && b.dataset.slug) { e.stopPropagation(); openDetail(b.dataset.slug); return; }
+    const row = e.target.closest('tr[data-slug]');
+    if (row && row.dataset.slug) openDetail(row.dataset.slug);
   });
-
-  categoryFilter.addEventListener('change', applyFiltersAndRender);
-  chainFilter.addEventListener('change', applyFiltersAndRender);
-  sortFilter.addEventListener('change', applyFiltersAndRender);
-
-  resetFiltersBtn.addEventListener('click', function () {
-    searchInput.value = '';
-    clearSearchBtn.style.display = 'none';
-    categoryFilter.value = 'ALL';
-    chainFilter.value = 'ALL';
-    sortFilter.value = 'implied_desc';
-    applyFiltersAndRender();
+  els.modalClose.addEventListener('click', closeModal);
+  els.modal.addEventListener('click', (e) => { if (e.target === els.modal) closeModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement !== els.search && !els.modal.open) { e.preventDefault(); els.search.focus(); }
+    else if (e.key === 'Escape' && els.modal.open) closeModal();
   });
+  window.addEventListener('hashchange', () => { applyHash(); renderTable(); });
 
-  modalCloseBtn.addEventListener('click', closeModal);
-  modalBackdrop.addEventListener('click', function (e) {
-    if (e.target === modalBackdrop) {
-      closeModal();
-    }
-  });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modalBackdrop.style.display !== 'none') {
-      closeModal();
-    }
-    if (e.key === '/' && document.activeElement !== searchInput) {
-      e.preventDefault();
-      searchInput.focus();
-    }
-  });
-
-  // Initialize
-  initData();
+  initHeader();
+  applyHash();
+  renderTable();
 })();

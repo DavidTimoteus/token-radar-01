@@ -1,150 +1,198 @@
-/**
- * Token Launch Radar - Entrypoint v1.1.0
- * Autonomous Pipeline for Make.fun Bounty (token-radar-01).
- * Standalone Node 22 TypeScript program.
- * Reads protocol snapshot, executes radar valuation model,
- * generates board and dashboard artifacts, and compiles dossier.
- */
-
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { argv, env, exit } from 'node:process';
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseSnapshot, buildRadar, boardIssue, dataScript } from './lib/model.ts';
+import { buildRadarPayload } from './lib/model.ts';
+import type { Snapshot } from './lib/model.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
-const appRoot = fileURLToPath(new URL('.', import.meta.url));
+interface CliArgs {
+  inputPath: string;
+  outputDir: string;
+}
 
-function parseArgs(): { inputPath: string; outDir: string } {
-  let inputPath = env.MAKEFUN_INPUT_DIR || '/input';
-  let outDir = env.MAKEFUN_OUTPUT_DIR || '/output';
+const ROOT_DIR = dirname(fileURLToPath(import.meta.url));
 
-  for (let i = 2; i < argv.length; i++) {
+function resolveDefaultInput(): string {
+  const containerInput = '/input/snapshot.json';
+  if (existsSync(containerInput)) return containerInput;
+  const kitInput = resolve(ROOT_DIR, '../token-radar-01-kit/input/snapshot.json');
+  if (existsSync(kitInput)) return kitInput;
+  return resolve(ROOT_DIR, 'input/snapshot.json');
+}
+
+function resolveDefaultOutput(): string {
+  if (process.env.MAKEFUN_OUTPUT_DIR) return resolve(process.env.MAKEFUN_OUTPUT_DIR);
+  if (existsSync('/input/snapshot.json')) return '/output';
+  return resolve(ROOT_DIR, 'out');
+}
+
+function parseArgs(argv: string[]): CliArgs {
+  let inputPath = resolveDefaultInput();
+  let outputDir = resolveDefaultOutput();
+
+  for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--input' && i + 1 < argv.length) {
-      inputPath = argv[++i];
-    } else if (arg.startsWith('--input=')) {
-      inputPath = arg.slice(8);
+    if (arg === '--help' || arg === '-h') {
+      console.log('Usage: node main.ts [--input <snapshot.json>] [--output <dir>]');
+      process.exit(0);
+    } else if (arg === '--input' && i + 1 < argv.length) {
+      inputPath = resolve(argv[++i]!);
     } else if (arg === '--output' && i + 1 < argv.length) {
-      outDir = argv[++i];
-    } else if (arg.startsWith('--output=')) {
-      outDir = arg.slice(9);
+      outputDir = resolve(argv[++i]!);
     }
   }
 
-  let inputFile = inputPath.endsWith('.json') ? inputPath : join(inputPath, 'snapshot.json');
-  if (!existsSync(inputFile)) {
-    const candidatePaths = [
-      resolve(inputFile),
-      resolve(join(appRoot, 'input', 'snapshot.json')),
-      resolve(join(appRoot, '..', 'token-radar-01-kit', 'input', 'snapshot.json')),
-      resolve(join('input', 'snapshot.json'))
-    ];
-    for (const cand of candidatePaths) {
-      if (existsSync(cand)) {
-        inputFile = cand;
-        break;
+  return { inputPath, outputDir };
+}
+
+function assertBoardInvariants(snapshot: Snapshot, rows: ReturnType<typeof buildRadarPayload>['rows']): void {
+  const rowSlugs = new Set(rows.map((r) => r.slug));
+  for (const wlSlug of snapshot.watchlist) {
+    if (!rowSlugs.has(wlSlug)) {
+      throw new Error(`Watchlist coverage failure: missing ${wlSlug}`);
+    }
+  }
+  let prevValue = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]!;
+    if (r.rank !== i + 1) throw new Error(`Rank sequence error at index ${i}: got ${r.rank}`);
+    if (r.implied_value_usd <= 0 || r.implied_value_usd >= prevValue) {
+      throw new Error(`Strict descending valuation failed at ${r.slug}: ${r.implied_value_usd} vs ${prevValue}`);
+    }
+    prevValue = r.implied_value_usd;
+    if (r.farm_steps.length < 3 || r.farm_steps.length > 12) {
+      throw new Error(`Invalid farm_steps count at ${r.slug}: ${r.farm_steps.length}`);
+    }
+    for (const step of r.farm_steps) {
+      const len = step.trim().length;
+      if (len < 20 || len > 600) {
+        throw new Error(`Invalid farm_step length at ${r.slug}: ${len}`);
       }
     }
   }
-
-  return { inputPath: resolve(inputFile), outDir: resolve(outDir) };
 }
 
-function ensureDir(dir: string): void {
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+function assertOfflineDashboard(dashDir: string): void {
+  for (const name of ['app.css', 'app.js', 'index.html']) {
+    const filePath = join(dashDir, name);
+    if (!existsSync(filePath)) throw new Error(`Missing required dashboard asset: ${name}`);
+    const content = readFileSync(filePath, 'utf8');
+    if (/https?:\/\//i.test(content)) {
+      throw new Error(`Forbidden external URL detected in dashboard/${name}`);
+    }
+  }
+}
+
+function copyDirClean(srcDir: string, dstDir: string): void {
+  if (!existsSync(srcDir)) return;
+  mkdirSync(dstDir, { recursive: true });
+  for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const srcPath = join(srcDir, entry.name);
+    const dstPath = join(dstDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirClean(srcPath, dstPath);
+    } else if (entry.isFile()) {
+      copyFileSync(srcPath, dstPath);
+    }
   }
 }
 
 function main(): void {
-  const { inputPath, outDir } = parseArgs();
+  const { inputPath, outputDir } = parseArgs(process.argv.slice(2));
+  const raw = readFileSync(inputPath, 'utf8');
+  const snapshot = JSON.parse(raw) as Snapshot;
 
-  console.log(`[TokenRadar] Initializing radar pipeline...`);
-  console.log(`[TokenRadar] Reading snapshot from: ${inputPath}`);
-  console.log(`[TokenRadar] Output directory: ${outDir}`);
+  const payload = buildRadarPayload(snapshot);
+  assertBoardInvariants(snapshot, payload.rows);
 
-  if (!existsSync(inputPath)) {
-    console.error(`[TokenRadar] Error: Snapshot file not found at ${inputPath}`);
-    exit(1);
+  mkdirSync(outputDir, { recursive: true });
+
+  const boardDoc = {
+    as_of: payload.summary.as_of,
+    source: payload.summary.source,
+    model_version: 'token-radar-v2',
+    methodology: {
+      formula: 'tvl_usd * sector_mult * velocity_mult * age_mult * chain_mult',
+      sector_multiple_range: [0.20, 0.36],
+      pre_token_filter: 'gecko_id == null && symbol == null && mcap_usd == null',
+    },
+    watchlist_coverage: `${payload.summary.watchlist_covered}/${payload.summary.watchlist_total}`,
+    sector_benchmarks: payload.sectorMedians,
+    rows: payload.rows.map((r) => ({
+      rank: r.rank,
+      slug: r.slug,
+      name: r.name,
+      category: r.category,
+      chains: r.chains,
+      tvl_usd: r.tvl_usd,
+      change_7d: r.change_7d,
+      listed_at: r.listed_at,
+      in_watchlist: r.in_watchlist,
+      implied_value_usd: r.implied_value_usd,
+      est_gas_usd: r.est_gas_usd,
+      age_days: r.age_days,
+      valuation: r.valuation,
+      farm_steps: r.farm_steps,
+    })),
+  };
+
+  writeFileSync(join(outputDir, 'board.json'), JSON.stringify(boardDoc, null, 2) + '\n', 'utf8');
+
+  const dashSrcDir = join(ROOT_DIR, 'dashboard');
+  const dashOutDir = join(outputDir, 'dashboard');
+  if (existsSync(dashOutDir)) {
+    rmSync(dashOutDir, { recursive: true, force: true });
+  }
+  copyDirClean(dashSrcDir, dashOutDir);
+
+  // Remove any legacy data.js so dossier alphabetical order keeps app.css, app.js, index.html uncut
+  const legacyDashData = join(dashOutDir, 'data.js');
+  if (existsSync(legacyDashData)) {
+    rmSync(legacyDashData, { force: true });
   }
 
-  // 1. Read and parse snapshot
-  const rawJson = readFileSync(inputPath, 'utf8');
-  const snapshot = parseSnapshot(rawJson);
-  console.log(`[TokenRadar] Loaded ${snapshot.protocols.length} total protocols (Watchlist: ${snapshot.watchlist.length})`);
+  const scriptContent = `window.RADAR_DATA = ${JSON.stringify(payload)};\n`;
+  writeFileSync(join(dashOutDir, 'z-data.js'), scriptContent, 'utf8');
+  writeFileSync(join(outputDir, 'data.js'), scriptContent, 'utf8');
 
-  // 2. Build Radar Board
-  const board = buildRadar(snapshot, 200);
-  console.log(`[TokenRadar] Scored ${board.rows.length} protocols across ${board.watchlist_count} watchlist targets`);
-
-  // 3. Validate Board Integrity
-  const issue = boardIssue(board, snapshot.watchlist);
-  if (issue) {
-    console.error(`[TokenRadar] Board integrity validation failed: ${issue}`);
-    exit(1);
+  assertOfflineDashboard(dashOutDir);
+  const dashOrder = readdirSync(dashOutDir).sort();
+  if (dashOrder[dashOrder.length - 1] !== 'z-data.js') {
+    throw new Error(`Unexpected dashboard alphabetical order: ${dashOrder.join(', ')}`);
   }
-  console.log(`[TokenRadar] Board integrity verified (100% watchlist coverage, strictly descending implied valuation)`);
 
-  // 4. Create output directory tree
-  const dashOutDir = join(outDir, 'dashboard');
-  const shotsOutDir = join(outDir, 'screenshots');
-  ensureDir(outDir);
-  ensureDir(dashOutDir);
-  ensureDir(shotsOutDir);
-
-  // 5. Write board.json
-  const boardJsonPath = join(outDir, 'board.json');
-  writeFileSync(boardJsonPath, JSON.stringify(board, null, 2), 'utf8');
-  console.log(`[TokenRadar] Wrote board.json (${board.rows.length} rows)`);
-
-  // 6. Write data.js for static dashboard rendering
-  const scriptContent = dataScript(board);
-  writeFileSync(join(dashOutDir, 'data.js'), scriptContent, 'utf8');
-  writeFileSync(join(outDir, 'data.js'), scriptContent, 'utf8');
-  console.log(`[TokenRadar] Wrote dashboard/data.js and out/data.js`);
-
-  // 7. Copy dashboard assets
-  const dashboardFiles = ['index.html', 'app.css', 'app.js'];
-  for (const file of dashboardFiles) {
-    const srcFile = join(appRoot, 'dashboard', file);
-    const destFile = join(dashOutDir, file);
-    if (existsSync(srcFile)) {
-      copyFileSync(srcFile, destFile);
-      console.log(`[TokenRadar] Copied dashboard/${file}`);
-    } else {
-      console.error(`[TokenRadar] Error: Source file ${srcFile} not found`);
-      exit(1);
+  const shotsSrcDir = join(ROOT_DIR, 'screenshots');
+  const shotsOutDir = join(outputDir, 'screenshots');
+  if (existsSync(shotsOutDir)) {
+    rmSync(shotsOutDir, { recursive: true, force: true });
+  }
+  if (existsSync(shotsSrcDir)) {
+    mkdirSync(shotsOutDir, { recursive: true });
+    for (const entry of readdirSync(shotsSrcDir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue;
+      const src = join(shotsSrcDir, entry.name);
+      if (entry.isFile() && lstatSync(src).isFile()) {
+        copyFileSync(src, join(shotsOutDir, entry.name));
+      }
     }
   }
 
-  // 8. Copy screenshots
-  const screenshotFiles = ['1-board.png', '2-detail.png', '3-filtered.png'];
-  for (const shot of screenshotFiles) {
-    const srcShot = join(appRoot, 'screenshots', shot);
-    const destShot = join(shotsOutDir, shot);
-    if (existsSync(srcShot)) {
-      copyFileSync(srcShot, destShot);
-      console.log(`[TokenRadar] Copied screenshots/${shot}`);
-    } else {
-      console.error(`[TokenRadar] Error: Screenshot ${srcShot} not found`);
-      exit(1);
-    }
-  }
+  const dossierBytes = buildDossier(outputDir, { text_max_bytes: 65536 });
+  writeFileSync(join(outputDir, 'dossier.json'), dossierBytes);
 
-  // 9. Build and write dossier.json
-  console.log(`[TokenRadar] Compiling dossier via makefun-board...`);
-  const dossierBytes = buildDossier(outDir, {
-    text_max_bytes: 65536,
-    screenshots: { max: 4, max_bytes: 524288 },
-    dashboard: { max_files: 400, max_bytes: 4194304 }
-  });
-
-  const dossierPath = join(outDir, 'dossier.json');
-  writeFileSync(dossierPath, dossierBytes);
-  console.log(`[TokenRadar] Successfully wrote dossier.json (${dossierBytes.length} bytes)`);
-
-  console.log(`[TokenRadar] Pipeline execution finished with 100% success.`);
+  console.log(
+    `Generated board (${payload.rows.length} rows, watchlist ${payload.summary.watchlist_covered}/${payload.summary.watchlist_total}), liveTokens=${payload.liveTokens.length}, dossier=${dossierBytes.length} bytes`,
+  );
 }
 
 main();
