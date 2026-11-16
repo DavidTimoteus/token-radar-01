@@ -9,39 +9,46 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { argv, env, exit } from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { parseSnapshot, buildRadar, boardIssue, dataScript } from './lib/model.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
+const appRoot = fileURLToPath(new URL('.', import.meta.url));
+
 function parseArgs(): { inputPath: string; outDir: string } {
-  let inputPath = 'input/snapshot.json';
-  let outDir = env.MAKEFUN_OUTPUT_DIR || 'out';
+  let inputPath = env.MAKEFUN_INPUT_DIR || '/input';
+  let outDir = env.MAKEFUN_OUTPUT_DIR || '/output';
 
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--input' && i + 1 < argv.length) {
       inputPath = argv[++i];
+    } else if (arg.startsWith('--input=')) {
+      inputPath = arg.slice(8);
     } else if (arg === '--output' && i + 1 < argv.length) {
       outDir = argv[++i];
+    } else if (arg.startsWith('--output=')) {
+      outDir = arg.slice(9);
     }
   }
 
-  // Fallback search paths for snapshot.json if default does not exist
-  if (!existsSync(inputPath)) {
+  let inputFile = inputPath.endsWith('.json') ? inputPath : join(inputPath, 'snapshot.json');
+  if (!existsSync(inputFile)) {
     const candidatePaths = [
-      resolve(inputPath),
-      resolve(join('..', 'token-radar-01-kit', 'input', 'snapshot.json')),
-      resolve(join('..', 'input', 'snapshot.json')),
+      resolve(inputFile),
+      resolve(join(appRoot, 'input', 'snapshot.json')),
+      resolve(join(appRoot, '..', 'token-radar-01-kit', 'input', 'snapshot.json')),
       resolve(join('input', 'snapshot.json'))
     ];
     for (const cand of candidatePaths) {
       if (existsSync(cand)) {
-        inputPath = cand;
+        inputFile = cand;
         break;
       }
     }
   }
 
-  return { inputPath: resolve(inputPath), outDir: resolve(outDir) };
+  return { inputPath: resolve(inputFile), outDir: resolve(outDir) };
 }
 
 function ensureDir(dir: string): void {
@@ -98,35 +105,30 @@ function main(): void {
   console.log(`[TokenRadar] Wrote dashboard/data.js and out/data.js`);
 
   // 7. Copy dashboard assets
-  const appRoot = resolve('.');
   const dashboardFiles = ['index.html', 'app.css', 'app.js'];
   for (const file of dashboardFiles) {
-    let srcFile = join(appRoot, 'dashboard', file);
-    if (!existsSync(srcFile)) {
-      srcFile = join(appRoot, 'entry', 'dashboard', file);
-    }
+    const srcFile = join(appRoot, 'dashboard', file);
     const destFile = join(dashOutDir, file);
     if (existsSync(srcFile)) {
       copyFileSync(srcFile, destFile);
       console.log(`[TokenRadar] Copied dashboard/${file}`);
     } else {
-      console.error(`[TokenRadar] Warning: Source file ${srcFile} not found`);
+      console.error(`[TokenRadar] Error: Source file ${srcFile} not found`);
+      exit(1);
     }
   }
 
   // 8. Copy screenshots
   const screenshotFiles = ['1-board.png', '2-detail.png', '3-filtered.png'];
   for (const shot of screenshotFiles) {
-    let srcShot = join(appRoot, 'screenshots', shot);
-    if (!existsSync(srcShot)) {
-      srcShot = join(appRoot, 'entry', 'screenshots', shot);
-    }
+    const srcShot = join(appRoot, 'screenshots', shot);
     const destShot = join(shotsOutDir, shot);
     if (existsSync(srcShot)) {
       copyFileSync(srcShot, destShot);
       console.log(`[TokenRadar] Copied screenshots/${shot}`);
     } else {
-      console.error(`[TokenRadar] Warning: Screenshot ${srcShot} not found`);
+      console.error(`[TokenRadar] Error: Screenshot ${srcShot} not found`);
+      exit(1);
     }
   }
 
