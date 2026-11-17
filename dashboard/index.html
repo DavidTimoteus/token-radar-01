@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Token Launch Radar — Empirical Comps &amp; Farming Desk</title>
+  <title>Token Launch Radar — Size-Curve Comps &amp; Net-EV Farming Desk</title>
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
@@ -13,82 +13,51 @@
         <div class="brand-mark">TR</div>
         <div>
           <h1 class="brand-title">TOKEN LAUNCH RADAR</h1>
-          <p class="brand-sub">Empirical Comps Valuation &amp; Costed Farming Intelligence</p>
+          <p class="brand-sub">Empirical Size-Curve Valuation &amp; Dollar-Netted Farming Intelligence</p>
         </div>
       </div>
       <div class="header-pills">
         <span class="pill">Snapshot <strong id="pillSnapshotDate" class="mono">--</strong></span>
         <span class="pill pill-accent">Watchlist <strong id="pillWatchlist" class="mono">-- / --</strong></span>
-        <span class="pill pill-model">Fit <strong id="pillModelMeta" class="mono">Huber + EB (N=--)</strong></span>
+        <span class="pill pill-model">Comps <strong id="pillModelMeta" class="mono">LOOCV N=--</strong></span>
       </div>
     </header>
-
-    <section class="hero-grid" aria-label="KPIs and empirical regression fit">
+    <section class="hero-grid" aria-label="KPIs and comps size curve">
       <div class="kpi-grid">
-        <article class="kpi-card">
-          <div class="kpi-label">Watchlist Floor Coverage</div>
-          <div class="kpi-value" id="kpiWatchlist">--</div>
-          <div class="kpi-sub" id="kpiWatchlistSub">100% of floor &ge; $50M pre-token cohorts</div>
-        </article>
-        <article class="kpi-card">
-          <div class="kpi-label">Ranked Pre-Token Board</div>
-          <div class="kpi-value" id="kpiUniverse">--</div>
-          <div class="kpi-sub" id="kpiUniverseSub">--</div>
-        </article>
-        <article class="kpi-card">
-          <div class="kpi-label">Pipeline Implied Value</div>
-          <div class="kpi-value" id="kpiImplied">--</div>
-          <div class="kpi-sub" id="kpiImpliedSub">P25&ndash;P75 empirical band</div>
-        </article>
-        <article class="kpi-card">
-          <div class="kpi-label">LOOCV Empirical Fit</div>
-          <div class="kpi-value" id="kpiModelFit">--</div>
-          <div class="kpi-sub" id="kpiModelSub">--</div>
-        </article>
+        <article class="kpi-card"><div class="kpi-label">Watchlist Floor Coverage</div><div class="kpi-value" id="kpiWatchlist">--</div><div class="kpi-sub" id="kpiWatchlistSub">--</div></article>
+        <article class="kpi-card"><div class="kpi-label">Pre-Token Radar Universe</div><div class="kpi-value" id="kpiUniverse">--</div><div class="kpi-sub" id="kpiUniverseSub">--</div></article>
+        <article class="kpi-card"><div class="kpi-label">Pipeline Value &amp; Agg. TVL</div><div class="kpi-value" id="kpiImplied">--</div><div class="kpi-sub" id="kpiTvlSub">--</div></article>
+        <article class="kpi-card"><div class="kpi-label">LOOCV Size-Curve Accuracy</div><div class="kpi-value" id="kpiModelFit">--</div><div class="kpi-sub" id="kpiModelSub">--</div></article>
       </div>
-      <aside class="chart-card" aria-label="Empirical comps scatter plot">
+      <aside class="chart-card" aria-label="Comps size curve scatter">
         <div class="chart-head">
-          <span class="chart-title">Traded Comps Regression (Log10 MCap vs TVL)</span>
+          <span class="chart-title">Comps Size Curve (Log10 MCap vs TVL, N=<span id="legTradedN">--</span>)</span>
           <div class="chart-legend">
-            <span class="leg-item"><i class="dot dot-traded"></i>Traded (<span id="legTradedN">--</span>)</span>
+            <span class="leg-item"><i class="dot dot-traded"></i>Clean Comps</span>
             <span class="leg-item"><i class="dot dot-prime"></i>Top Watchlist</span>
-            <span class="leg-item"><i class="dot dot-line"></i>Huber Fit &amp; P25&ndash;P75</span>
+            <span class="leg-item"><i class="dot dot-line"></i>Huber Curve &amp; P25&ndash;P75</span>
           </div>
         </div>
         <div id="compsChartWrap" class="chart-wrap"></div>
       </aside>
     </section>
-
     <section class="toolbar" aria-label="Universe tabs and filters">
       <div class="toolbar-top">
         <div class="view-tabs" role="tablist">
-          <button type="button" class="tab-btn active" data-view="radar" role="tab" aria-selected="true">
-            Pre-Token Radar (<span id="tabRadarCount">--</span>)
-          </button>
-          <button type="button" class="tab-btn" data-view="watchlist" role="tab" aria-selected="false">
-            Watchlist Floor (<span id="tabWlCount">--</span>)
-          </button>
-          <button type="button" class="tab-btn" data-view="early" role="tab" aria-selected="false">
-            Early Alpha &lt;$50M (<span id="tabEarlyCount">--</span>)
-          </button>
-          <button type="button" class="tab-btn" data-view="live" role="tab" aria-selected="false">
-            Traded Comps (<span id="tabLiveCount">--</span>)
-          </button>
+          <button type="button" class="tab-btn active" data-view="radar" role="tab" aria-selected="true">Pre-Token Radar (<span id="tabRadarCount">--</span>)</button>
+          <button type="button" class="tab-btn" data-view="watchlist" role="tab" aria-selected="false">Watchlist (<span id="tabWlCount">--</span>)</button>
+          <button type="button" class="tab-btn" data-view="early" role="tab" aria-selected="false">Early &lt;$50M (<span id="tabEarlyCount">--</span>)</button>
+          <button type="button" class="tab-btn" data-view="live" role="tab" aria-selected="false">Traded Comps (<span id="tabLiveCount">--</span>)</button>
         </div>
         <div class="controls-row">
           <input id="searchInput" class="ctrl-input" type="search" placeholder="Search protocol, sector, chain (/)" aria-label="Search protocols" />
-          <select id="categorySelect" class="ctrl-select" aria-label="Filter by sector">
-            <option value="">All Sectors</option>
-          </select>
-          <select id="chainSelect" class="ctrl-select" aria-label="Filter by chain">
-            <option value="">All Chains</option>
-          </select>
-          <select id="tierSelect" class="ctrl-select" aria-label="Filter by triage tier">
-            <option value="">All Tiers</option>
-            <option value="Prime Target">Prime Target</option>
-            <option value="Early Alpha (<$50M)">Early Alpha (&lt;$50M)</option>
-            <option value="Monitor">Monitor</option>
-            <option value="Thin / Skip">Thin / Skip</option>
+          <select id="categorySelect" class="ctrl-select" aria-label="Filter by sector"><option value="">All Sectors</option></select>
+          <select id="chainSelect" class="ctrl-select" aria-label="Filter by chain"><option value="">All Chains</option></select>
+          <select id="verdictSelect" class="ctrl-select" aria-label="Filter by verdict">
+            <option value="">All Verdicts</option>
+            <option value="FARM">FARM (Net EV &ge; $0)</option>
+            <option value="THIN">THIN (Marginal)</option>
+            <option value="SKIP">SKIP (Negative/Outflow)</option>
           </select>
           <select id="growthSelect" class="ctrl-select" aria-label="Filter by 7d growth">
             <option value="">7d Growth: Any</option>
@@ -98,11 +67,11 @@
           </select>
           <select id="sortSelect" class="ctrl-select" aria-label="Sort rows">
             <option value="rank">Sort: Model Rank</option>
+            <option value="netev">Sort: Net $ EV / $1K</option>
             <option value="tvl">Sort: Locked TVL</option>
             <option value="growth">Sort: 7d Growth</option>
+            <option value="cost">Sort: 90d Cost</option>
             <option value="age">Sort: Tracked Age</option>
-            <option value="cost">Sort: 90d Farm Cost</option>
-            <option value="breakeven">Sort: Break-Even FDV</option>
           </select>
         </div>
       </div>
@@ -118,44 +87,17 @@
         <button type="button" class="chip chip-reset" id="resetBtn">Reset All</button>
       </div>
     </section>
-
-    <div class="active-filter-banner" id="activeFilterBanner" hidden>
-      <span id="activeFilterText"></span>
-      <button type="button" class="banner-clear" id="bannerClearBtn">Clear Filters</button>
-    </div>
-
-    <div class="benchmark-note" id="benchmarkNote" hidden>
-      Traded Comps Cohort: protocols recording active CoinGecko IDs and market caps. Separated strictly from pre-token rankings and used to fit the cross-validated Huber-IRLS + Empirical-Bayes sector model.
-    </div>
-
-    <main id="board" class="table-card">
-      <div class="table-scroll">
-        <table>
-          <thead id="tableHead"></thead>
-          <tbody id="tableBody"></tbody>
-        </table>
-      </div>
-      <div id="emptyState" class="empty-state" hidden>No protocols match the active filter criteria.</div>
-    </main>
-
-    <footer class="footer-bar">
-      <span id="footerSource">Snapshot source: DefiLlama frozen record</span>
-      <span>Zero external requests &middot; Empirical Huber-IRLS + EB sector shrinkage &middot; Click any row for math, peers &amp; farm plan</span>
-    </footer>
+    <div class="active-filter-banner" id="activeFilterBanner" hidden><span id="activeFilterText"></span><button type="button" class="banner-clear" id="bannerClearBtn">Clear Filters</button></div>
+    <div class="benchmark-note" id="benchmarkNote" hidden>Clean Token-Family Comps (N=93): deduped by CoinGecko ID, excluding CEX, bridges, liquid staking, and wrapped tokens. Used to fit the Huber power-law size curve and LOOCV diagnostics.</div>
+    <main id="board" class="table-card"><div class="table-scroll"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></div><div id="emptyState" class="empty-state" hidden>No protocols match the active filter criteria.</div></main>
+    <footer class="footer-bar"><span id="footerSource">Snapshot source: DefiLlama frozen record</span><span>100% offline &middot; Shared dashboard/model.js engine &middot; P25 Net EV per $1,000 deployed</span></footer>
   </div>
-
   <dialog id="detailModal" aria-labelledby="modalTitle">
-    <div class="modal-head">
-      <div>
-        <h2 class="modal-title" id="modalTitle">Protocol Detail</h2>
-        <div class="modal-chains" id="modalChains"></div>
-      </div>
-      <button type="button" class="modal-close" id="modalCloseBtn" aria-label="Close detail">&times;</button>
-    </div>
+    <div class="modal-head"><div><h2 class="modal-title" id="modalTitle">Protocol Detail</h2><div class="modal-chains" id="modalChains"></div></div><button type="button" class="modal-close" id="modalCloseBtn" aria-label="Close detail">&times;</button></div>
     <div class="modal-body" id="modalBody"></div>
   </dialog>
-
-  <script src="z-data.js"></script>
+  <script src="../data.js"></script>
+  <script src="model.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

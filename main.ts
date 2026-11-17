@@ -8,11 +8,67 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildRadarPayload } from './lib/model.ts';
-import type { Snapshot } from './lib/model.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
+
+const require = createRequire(import.meta.url);
+const RadarModel = require('./dashboard/model.js') as {
+  buildRadarPayload: (snapshot: Snapshot) => RadarPayload;
+};
+
+interface Snapshot {
+  as_of: string;
+  source: string;
+  floor_usd: number;
+  protocols: Array<Record<string, unknown>>;
+  watchlist: string[];
+}
+
+interface RadarRow {
+  rank: number;
+  slug: string;
+  name: string;
+  category: string;
+  chains: string[];
+  farm_chain: string;
+  tvl_usd: number;
+  change_7d: number | null;
+  listed_at: string | null;
+  in_watchlist: boolean;
+  verdict: string;
+  verdict_reason: string;
+  implied_value_usd: number;
+  p25_usd: number;
+  p75_usd: number;
+  p25_airdrop_usd_per_1k: number;
+  est_cost_90d_usd: number;
+  net_ev_p25_usd: number;
+  breakeven_fdv_usd: number;
+  age_days: number;
+  valuation: Record<string, unknown>;
+  farm_steps: string[];
+  step_meta: Array<Record<string, unknown>>;
+}
+
+interface RadarPayload {
+  summary: {
+    as_of: string;
+    source: string;
+    floor_usd: number;
+    watchlist_covered: number;
+    watchlist_total: number;
+  };
+  modelStats: {
+    n_traded: number;
+    oos_fold_err: number;
+    spearman_rho: number;
+  };
+  rows: RadarRow[];
+  liveTokens: Array<Record<string, unknown>>;
+  sectorMedians: Record<string, number>;
+}
 
 interface CliArgs {
   inputPath: string;
@@ -24,7 +80,7 @@ const ROOT_DIR = dirname(fileURLToPath(import.meta.url));
 function resolveDefaultInput(): string {
   const containerInput = '/input/snapshot.json';
   if (existsSync(containerInput)) return containerInput;
-  const kitInput = resolve(ROOT_DIR, '../token-radar-01-kit/input/snapshot.json');
+  const kitInput = resolve(ROOT_DIR, '../kit_v19/token-radar-01-kit/input/snapshot.json');
   if (existsSync(kitInput)) return kitInput;
   return resolve(ROOT_DIR, 'input/snapshot.json');
 }
@@ -54,7 +110,7 @@ function parseArgs(argv: string[]): CliArgs {
   return { inputPath, outputDir };
 }
 
-function assertBoardInvariants(snapshot: Snapshot, rows: ReturnType<typeof buildRadarPayload>['rows']): void {
+function assertBoardInvariants(snapshot: Snapshot, rows: RadarRow[]): void {
   const rowSlugs = new Set(rows.map((r) => r.slug));
   for (const wlSlug of snapshot.watchlist) {
     if (!rowSlugs.has(wlSlug)) {
@@ -65,7 +121,7 @@ function assertBoardInvariants(snapshot: Snapshot, rows: ReturnType<typeof build
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]!;
     if (r.rank !== i + 1) throw new Error(`Rank sequence error at index ${i}: got ${r.rank}`);
-    if (r.implied_value_usd <= 0 || r.implied_value_usd >= prevValue) {
+    if (!Number.isInteger(r.implied_value_usd) || r.implied_value_usd <= 0 || r.implied_value_usd >= prevValue) {
       throw new Error(`Strict descending valuation failed at ${r.slug}: ${r.implied_value_usd} vs ${prevValue}`);
     }
     prevValue = r.implied_value_usd;
@@ -82,7 +138,7 @@ function assertBoardInvariants(snapshot: Snapshot, rows: ReturnType<typeof build
 }
 
 function assertOfflineDashboard(dashDir: string): void {
-  for (const name of ['app.css', 'app.js', 'index.html']) {
+  for (const name of ['app.css', 'app.js', 'index.html', 'model.js']) {
     const filePath = join(dashDir, name);
     if (!existsSync(filePath)) throw new Error(`Missing required dashboard asset: ${name}`);
     const content = readFileSync(filePath, 'utf8');
@@ -112,7 +168,7 @@ function main(): void {
   const raw = readFileSync(inputPath, 'utf8');
   const snapshot = JSON.parse(raw) as Snapshot;
 
-  const payload = buildRadarPayload(snapshot);
+  const payload = RadarModel.buildRadarPayload(snapshot);
   assertBoardInvariants(snapshot, payload.rows);
 
   mkdirSync(outputDir, { recursive: true });
@@ -120,12 +176,12 @@ function main(): void {
   const boardDoc = {
     as_of: payload.summary.as_of,
     source: payload.summary.source,
-    model_version: 'token-radar-v3-empirical-eb',
+    model_version: 'token-radar-v4-sizecurve-loocv',
     methodology: {
-      formula: '10^(b0 + b_tvl*log10(tvl) + b_chains*log10(chains) + eb_sector_res) * velocity_mult * age_mult',
-      regression: 'Huber-IRLS Ridge + Empirical-Bayes Sector Shrinkage (k=6) fitted on traded protocols (mcap_usd > 0 && tvl_usd > 0)',
-      loocv_r2: payload.modelStats.loocv_r2,
-      loocv_mdape_pct: payload.modelStats.loocv_mdape_pct,
+      formula: '10^(b0 + b_tvl*log10(tvl) + eb_sector_res) * velocity_mult * age_mult',
+      regression: 'Huber-IRLS Power-Law Size Curve + Empirical-Bayes Sector Shrinkage (k=8) on 93 clean token-family comps',
+      oos_fold_err: payload.modelStats.oos_fold_err,
+      spearman_rho: payload.modelStats.spearman_rho,
       pre_token_filter: 'gecko_id == null && symbol == null && mcap_usd == null',
     },
     model_stats: payload.modelStats,
@@ -137,19 +193,19 @@ function main(): void {
       name: r.name,
       category: r.category,
       chains: r.chains,
-      primary_chain: r.primary_chain,
+      farm_chain: r.farm_chain,
       tvl_usd: r.tvl_usd,
       change_7d: r.change_7d,
       listed_at: r.listed_at,
       in_watchlist: r.in_watchlist,
-      tier: r.tier,
-      tier_reason: r.tier_reason,
+      verdict: r.verdict,
+      verdict_reason: r.verdict_reason,
       implied_value_usd: r.implied_value_usd,
       p25_usd: r.p25_usd,
       p75_usd: r.p75_usd,
-      est_gas_usd: r.est_gas_usd,
+      p25_airdrop_usd_per_1k: r.p25_airdrop_usd_per_1k,
       est_cost_90d_usd: r.est_cost_90d_usd,
-      ticket_usd: r.ticket_usd,
+      net_ev_p25_usd: r.net_ev_p25_usd,
       breakeven_fdv_usd: r.breakeven_fdv_usd,
       age_days: r.age_days,
       valuation: r.valuation,
@@ -166,21 +222,16 @@ function main(): void {
   }
   copyDirClean(dashSrcDir, dashOutDir);
 
-  // Remove any legacy data.js so dossier alphabetical order keeps app.css, app.js, index.html uncut
-  const legacyDashData = join(dashOutDir, 'data.js');
-  if (existsSync(legacyDashData)) {
-    rmSync(legacyDashData, { force: true });
+  // Keep dashboard/ pure source only so buildDossier includes 100% of every file with 0 bytes cut
+  for (const stale of ['data.js', 'z-data.js']) {
+    const stalePath = join(dashOutDir, stale);
+    if (existsSync(stalePath)) rmSync(stalePath, { force: true });
   }
 
   const scriptContent = `window.RADAR_DATA = ${JSON.stringify(payload)};\n`;
-  writeFileSync(join(dashOutDir, 'z-data.js'), scriptContent, 'utf8');
   writeFileSync(join(outputDir, 'data.js'), scriptContent, 'utf8');
 
   assertOfflineDashboard(dashOutDir);
-  const dashOrder = readdirSync(dashOutDir).sort();
-  if (dashOrder[dashOrder.length - 1] !== 'z-data.js') {
-    throw new Error(`Unexpected dashboard alphabetical order: ${dashOrder.join(', ')}`);
-  }
 
   const shotsSrcDir = join(ROOT_DIR, 'screenshots');
   const shotsOutDir = join(outputDir, 'screenshots');
@@ -202,7 +253,7 @@ function main(): void {
   writeFileSync(join(outputDir, 'dossier.json'), dossierBytes);
 
   console.log(
-    `Generated board (${payload.rows.length} rows, watchlist ${payload.summary.watchlist_covered}/${payload.summary.watchlist_total}), liveTokens=${payload.liveTokens.length}, dossier=${dossierBytes.length} bytes`,
+    `Generated board (${payload.rows.length} rows, watchlist ${payload.summary.watchlist_covered}/${payload.summary.watchlist_total}), cleanComps=${payload.liveTokens.length}, oosFold=${payload.modelStats.oos_fold_err}x, rho=${payload.modelStats.spearman_rho}, dossier=${dossierBytes.length} bytes`,
   );
 }
 
