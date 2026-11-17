@@ -42,9 +42,13 @@ interface RadarRow {
   implied_value_usd: number;
   p25_usd: number;
   p75_usd: number;
-  p25_airdrop_usd_per_1k: number;
+  ticket_usd: number;
+  min_deposit_usd: number;
+  p25_airdrop_rec_usd: number;
+  mid_airdrop_rec_usd: number;
   est_cost_90d_usd: number;
   net_ev_p25_usd: number;
+  net_ev_mid_usd: number;
   breakeven_fdv_usd: number;
   age_days: number;
   valuation: Record<string, unknown>;
@@ -203,9 +207,13 @@ function main(): void {
       implied_value_usd: r.implied_value_usd,
       p25_usd: r.p25_usd,
       p75_usd: r.p75_usd,
-      p25_airdrop_usd_per_1k: r.p25_airdrop_usd_per_1k,
+      ticket_usd: r.ticket_usd,
+      min_deposit_usd: r.min_deposit_usd,
+      p25_airdrop_rec_usd: r.p25_airdrop_rec_usd,
+      mid_airdrop_rec_usd: r.mid_airdrop_rec_usd,
       est_cost_90d_usd: r.est_cost_90d_usd,
       net_ev_p25_usd: r.net_ev_p25_usd,
+      net_ev_mid_usd: r.net_ev_mid_usd,
       breakeven_fdv_usd: r.breakeven_fdv_usd,
       age_days: r.age_days,
       valuation: r.valuation,

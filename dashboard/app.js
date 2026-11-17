@@ -29,7 +29,7 @@
   };
   const formatFullUsd = (n) => (n == null || !Number.isFinite(n) ? '--' : `$${Math.round(n).toLocaleString('en-US')}`);
   const formatPct = (v) => (v == null || !Number.isFinite(v) ? '<span class="flat">N/A</span>' : `<span class="${v > 0.01 ? 'pos' : v < -0.01 ? 'neg' : 'flat'}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`);
-  const formatNetEv = (v) => `<span class="${v >= 0 ? 'pos' : v >= -5 ? 'flat' : 'neg'}">${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(2)}</span>`;
+  const formatNetEv = (v) => `<span class="${v >= 2 ? 'pos' : v >= -2 ? 'flat' : 'neg'}">${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(2)}</span>`;
   const verdictBadgeHtml = (v) => v === 'FARM' ? '<span class="badge badge-farm">FARM</span>' : v === 'THIN' ? '<span class="badge badge-thin">THIN</span>' : '<span class="badge badge-skip">SKIP</span>';
 
   function buildHeaderMetrics() {
@@ -60,16 +60,16 @@
     const xMin = 6.5, xMax = 10.6, yMin = 4.6, yMax = 10.6;
     const px = (lx) => pad.l + ((lx - xMin) / (xMax - xMin)) * (W - pad.l - pad.r);
     const py = (ly) => H - pad.b - ((ly - yMin) / (yMax - yMin)) * (H - pad.t - pad.b);
-    const gridX = [[7, '$10M'], [8, '$100M'], [9, '$1B'], [10, '$10B']].map(([g, l]) => `<line x1="${px(g).toFixed(1)}" y1="${pad.t}" x2="${px(g).toFixed(1)}" y2="${H - pad.b}" stroke="rgba(148,163,184,0.12)"/><text x="${px(g).toFixed(1)}" y="${H - 5}" fill="#64748b" font-size="8.5" text-anchor="middle">${l}</text>`).join('');
-    const gridY = [[6, '$1M'], [8, '$100M'], [10, '$10B']].map(([g, l]) => `<line x1="${pad.l}" y1="${py(g).toFixed(1)}" x2="${W - pad.r}" y2="${py(g).toFixed(1)}" stroke="rgba(148,163,184,0.12)"/><text x="${pad.l - 5}" y="${(py(g) + 3).toFixed(1)}" fill="#64748b" font-size="8.5" text-anchor="end">${l}</text>`).join('');
+    const gridX = [[7, '$10M'], [8, '$100M'], [9, '$1B'], [10, '$10B']].map(([g, l]) => `<line x1="${px(g).toFixed(1)}" y1="${pad.t}" x2="${px(g).toFixed(1)}" y2="${H - pad.b}" stroke="#EAE5DC"/><text x="${px(g).toFixed(1)}" y="${H - 5}" fill="#7A828E" font-size="8.5" text-anchor="middle">${l}</text>`).join('');
+    const gridY = [[6, '$1M'], [8, '$100M'], [10, '$10B']].map(([g, l]) => `<line x1="${pad.l}" y1="${py(g).toFixed(1)}" x2="${W - pad.r}" y2="${py(g).toFixed(1)}" stroke="#EAE5DC"/><text x="${pad.l - 5}" y="${(py(g) + 3).toFixed(1)}" fill="#7A828E" font-size="8.5" text-anchor="end">${l}</text>`).join('');
     const ly = (lx, sh = 0) => m.intercept + m.beta_tvl * lx + sh;
     const band = [`${px(xMin).toFixed(1)},${py(ly(xMin, m.residual_q75_log10)).toFixed(1)}`, `${px(xMax).toFixed(1)},${py(ly(xMax, m.residual_q75_log10)).toFixed(1)}`, `${px(xMax).toFixed(1)},${py(ly(xMax, m.residual_q25_log10)).toFixed(1)}`, `${px(xMin).toFixed(1)},${py(ly(xMin, m.residual_q25_log10)).toFixed(1)}`].join(' ');
-    const dots = data.liveTokens.map((t) => `<circle cx="${px(Math.min(xMax, Math.max(xMin, Math.log10(t.tvl_usd)))).toFixed(1)}" cy="${py(Math.min(yMax, Math.max(yMin, Math.log10(t.mcap_usd)))).toFixed(1)}" r="2.3" fill="rgba(148,163,184,0.52)"/>`).join('');
+    const dots = data.liveTokens.map((t) => `<circle cx="${px(Math.min(xMax, Math.max(xMin, Math.log10(t.tvl_usd)))).toFixed(1)}" cy="${py(Math.min(yMax, Math.max(yMin, Math.log10(t.mcap_usd)))).toFixed(1)}" r="2.3" fill="rgba(92,100,112,0.5)"/>`).join('');
     const topPre = data.rows.filter((r) => r.in_watchlist).slice(0, 15).map((r) => {
       const cx = px(Math.min(xMax, Math.max(xMin, Math.log10(r.tvl_usd)))), cy = py(Math.min(yMax, Math.max(yMin, Math.log10(r.implied_value_usd))));
-      return `<polygon points="${cx.toFixed(1)},${(cy - 3.3).toFixed(1)} ${(cx + 3.3).toFixed(1)},${cy.toFixed(1)} ${cx.toFixed(1)},${(cy + 3.3).toFixed(1)} ${(cx - 3.3).toFixed(1)},${cy.toFixed(1)}" fill="#f59e0b" stroke="#0a0e17" stroke-width="0.6"/>`;
+      return `<polygon points="${cx.toFixed(1)},${(cy - 3.4).toFixed(1)} ${(cx + 3.4).toFixed(1)},${cy.toFixed(1)} ${cx.toFixed(1)},${(cy + 3.4).toFixed(1)} ${(cx - 3.4).toFixed(1)},${cy.toFixed(1)}" fill="#A66D07" stroke="#FFFFFF" stroke-width="0.7"/>`;
     }).join('');
-    els.chartWrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${gridX}${gridY}<polygon points="${band}" fill="rgba(16,185,129,0.12)"/><line x1="${px(xMin).toFixed(1)}" y1="${py(ly(xMin)).toFixed(1)}" x2="${px(xMax).toFixed(1)}" y2="${py(ly(xMax)).toFixed(1)}" stroke="#10b981" stroke-width="1.7"/>${dots}${topPre}</svg>`;
+    els.chartWrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${gridX}${gridY}<polygon points="${band}" fill="rgba(13,122,79,0.12)"/><line x1="${px(xMin).toFixed(1)}" y1="${py(ly(xMin)).toFixed(1)}" x2="${px(xMax).toFixed(1)}" y2="${py(ly(xMax)).toFixed(1)}" stroke="#0D7A4F" stroke-width="1.8"/>${dots}${topPre}</svg>`;
   }
 
   function applyRadarFilters() {
@@ -129,13 +129,14 @@
       return;
     }
 
-    els.thead.innerHTML = `<tr><th class="${sortCls('rank')}" data-sort="rank">Rank${sortArrow('rank')}</th><th>Protocol &amp; Verdict</th><th class="num ${sortCls('tvl')}" data-sort="tvl">Locked TVL${sortArrow('tvl')}</th><th class="num ${sortCls('growth')}" data-sort="growth">7d Chg${sortArrow('growth')}</th><th class="num ${sortCls('age')}" data-sort="age">Age${sortArrow('age')}</th><th class="num ${sortCls('implied')}" data-sort="implied">Size-Curve Value (P25–P75)${sortArrow('implied')}</th><th class="num ${sortCls('netev')}" data-sort="netev">P25 Net EV / $1K${sortArrow('netev')}</th><th class="num ${sortCls('cost')}" data-sort="cost">90d Cost / Plan${sortArrow('cost')}</th></tr>`;
+    els.thead.innerHTML = `<tr><th class="${sortCls('rank')}" data-sort="rank">Rank${sortArrow('rank')}</th><th>Protocol &amp; Verdict</th><th class="num ${sortCls('tvl')}" data-sort="tvl">Locked TVL${sortArrow('tvl')}</th><th class="num ${sortCls('growth')}" data-sort="growth">7d Chg${sortArrow('growth')}</th><th class="num ${sortCls('age')}" data-sort="age">Age${sortArrow('age')}</th><th class="num ${sortCls('implied')}" data-sort="implied">Size-Curve Value (P25–P75)${sortArrow('implied')}</th><th class="num ${sortCls('netev')}" data-sort="netev">P25 Net EV (Rec. Ticket)${sortArrow('netev')}</th><th class="num ${sortCls('cost')}" data-sort="cost">90d Cost / Plan${sortArrow('cost')}</th></tr>`;
     const maxV = data.rows[0]?.implied_value_usd || 1;
     els.tbody.innerHTML = list.map((r) => {
       const w = Math.max(5, Math.min(100, Math.round((Math.log10(r.implied_value_usd + 1) / Math.log10(maxV + 1)) * 100)));
       const oc = st.chain ? [st.chain, ...r.chains.filter((c) => c !== st.chain)] : r.chains;
       const ch = oc.slice(0, 3).map((c) => `<span class="chain-tag">${esc(c)}</span>`).join('') + (oc.length > 3 ? `<span class="chain-tag">+${oc.length - 3}</span>` : '');
-      return `<tr data-slug="${esc(r.slug)}"><td class="rank-cell ${r.rank <= 10 ? 'rank-top' : ''}">#${r.rank}</td><td><div class="proto-name-row"><span class="proto-name">${esc(r.name)}</span>${r.in_watchlist ? '<span class="badge badge-wl">WATCHLIST</span>' : ''}${verdictBadgeHtml(r.verdict)}</div><div class="proto-meta"><span class="cat-tag">${esc(r.category)}</span>${ch}</div></td><td class="num">${formatUsd(r.tvl_usd)}<span class="sub-line">${esc(r.farm_chain)}</span></td><td class="num">${formatPct(r.change_7d)}</td><td class="num">${r.age_days}d<span class="sub-line">${(r.age_days / 365).toFixed(1)}y</span></td><td class="num"><div class="val-box"><span class="val-main">${formatUsd(r.implied_value_usd)}</span><span class="val-track"><span class="val-fill" style="width:${w}%"></span></span><span class="sub-line">${formatUsd(r.p25_usd)} – ${formatUsd(r.p75_usd)}</span></div></td><td class="num">${formatNetEv(r.net_ev_p25_usd)}<span class="sub-line">P25 $${r.p25_airdrop_usd_per_1k.toFixed(1)}</span></td><td class="num"><button type="button" class="farm-pill-btn" data-slug="${esc(r.slug)}">$${r.est_cost_90d_usd.toFixed(1)} &rarr;</button></td></tr>`;
+      const minLbl = r.min_deposit_usd >= 1000 ? `$${(r.min_deposit_usd / 1000).toFixed(1)}k` : `$${r.min_deposit_usd}`;
+      return `<tr data-slug="${esc(r.slug)}"><td class="rank-cell ${r.rank <= 10 ? 'rank-top' : ''}">#${r.rank}</td><td><div class="proto-name-row"><span class="proto-name">${esc(r.name)}</span>${r.in_watchlist ? '<span class="badge badge-wl">WATCHLIST</span>' : ''}${verdictBadgeHtml(r.verdict)}</div><div class="proto-meta"><span class="cat-tag">${esc(r.category)}</span>${ch}</div></td><td class="num">${formatUsd(r.tvl_usd)}<span class="sub-line">${esc(r.farm_chain)}</span></td><td class="num">${formatPct(r.change_7d)}</td><td class="num">${r.age_days}d<span class="sub-line">${(r.age_days / 365).toFixed(1)}y</span></td><td class="num"><div class="val-box"><span class="val-main">${formatUsd(r.implied_value_usd)}</span><span class="val-track"><span class="val-fill" style="width:${w}%"></span></span><span class="sub-line">${formatUsd(r.p25_usd)} – ${formatUsd(r.p75_usd)}</span></div></td><td class="num">${formatNetEv(r.net_ev_p25_usd)}<span class="sub-line">$${(r.ticket_usd / 1000).toFixed(0)}k tkt · Min ${minLbl}</span></td><td class="num"><button type="button" class="farm-pill-btn" data-slug="${esc(r.slug)}">$${r.est_cost_90d_usd.toFixed(2)} &rarr;</button></td></tr>`;
     }).join('');
   }
 
@@ -143,7 +144,7 @@
     const row = data.rows.find((r) => r.slug === slug);
     if (!row) return;
     const v = row.valuation, m = data.modelStats, tLog = Math.log10(row.tvl_usd);
-    els.modalTitle.innerHTML = `<span class="mono" style="color:var(--emerald)">#${row.rank}</span> ${esc(row.name)} ${row.in_watchlist ? '<span class="badge badge-wl">WATCHLIST</span>' : ''} ${verdictBadgeHtml(row.verdict)} <span class="cat-tag">${esc(row.category)}</span>`;
+    els.modalTitle.innerHTML = `<span class="mono" style="color:var(--em)">#${row.rank}</span> ${esc(row.name)} ${row.in_watchlist ? '<span class="badge badge-wl">WATCHLIST</span>' : ''} ${verdictBadgeHtml(row.verdict)} <span class="cat-tag">${esc(row.category)}</span>`;
     els.modalChains.innerHTML = row.chains.slice(0, 7).map((c) => `<span class="chain-tag">${esc(c)}</span>`).join('') + (row.chains.length > 7 ? `<span class="chain-tag">+${row.chains.length - 7} more</span>` : '');
 
     const sizeComps = data.liveTokens.slice().sort((a, b) => Math.abs(Math.log10(a.tvl_usd) - tLog) - Math.abs(Math.log10(b.tvl_usd) - tLog)).slice(0, 3);
@@ -154,13 +155,14 @@
       const meta = row.step_meta && row.step_meta[i], desc = s.replace(/\s*\(Cost:[^)]+\)\s*$/i, '').trim();
       return `<li class="step-item"><div class="step-num">${i + 1}</div><div><div class="step-desc">${esc(desc)}</div><div class="step-badges"><span class="meta-badge meta-cost">Cost: ${esc(meta ? meta.cost : '')}</span><span class="meta-badge meta-time">Time: ${esc(meta ? meta.time : '')}</span></div></div></li>`;
     }).join('');
+    const minLbl = row.min_deposit_usd >= 1000 ? `$${(row.min_deposit_usd / 1000).toFixed(1)}k` : `$${row.min_deposit_usd}`;
 
     els.modalBody.innerHTML = `
       <div class="modal-stats">
         <div class="m-stat"><div class="m-stat-k">Locked TVL</div><div class="m-stat-v">${formatUsd(row.tvl_usd)}</div><div class="sub-line">${formatPct(row.change_7d)} 7d &middot; ${row.age_days}d age</div></div>
-        <div class="m-stat"><div class="m-stat-k">Implied Value (P25–P75)</div><div class="m-stat-v" style="color:var(--emerald)">${formatUsd(row.implied_value_usd)}</div><div class="sub-line mono">${formatUsd(row.p25_usd)} – ${formatUsd(row.p75_usd)}</div></div>
-        <div class="m-stat"><div class="m-stat-k">P25 Airdrop / $1K</div><div class="m-stat-v">$${row.p25_airdrop_usd_per_1k.toFixed(2)}</div><div class="sub-line mono">5% pool &minus; $${row.est_cost_90d_usd.toFixed(2)} 90d cost</div></div>
-        <div class="m-stat"><div class="m-stat-k">P25 Net $ EV / $1K</div><div class="m-stat-v">${formatNetEv(row.net_ev_p25_usd)}</div><div class="sub-line mono">Route: ${esc(row.farm_chain)} &middot; ${esc(row.verdict)}</div></div>
+        <div class="m-stat"><div class="m-stat-k">Implied Value (P25–P75)</div><div class="m-stat-v" style="color:var(--em)">${formatUsd(row.implied_value_usd)}</div><div class="sub-line mono">${formatUsd(row.p25_usd)} – ${formatUsd(row.p75_usd)}</div></div>
+        <div class="m-stat"><div class="m-stat-k">Rec. Ticket &amp; Min BE</div><div class="m-stat-v">$${row.ticket_usd.toLocaleString('en-US')}</div><div class="sub-line mono">Min P25 Deposit: ${minLbl}</div></div>
+        <div class="m-stat"><div class="m-stat-k">Net EV (P25 / Mid)</div><div class="m-stat-v">${formatNetEv(row.net_ev_p25_usd)} <span style="font-size:11px;color:var(--muted)">/ +$${row.net_ev_mid_usd.toFixed(1)}</span></div><div class="sub-line mono">Route: ${esc(row.farm_chain)} &middot; $${row.est_cost_90d_usd.toFixed(2)} cost</div></div>
       </div>
       <div class="detail-cols">
         <div class="col-stack">
@@ -170,7 +172,7 @@
               <div class="arith-step"><div class="arith-k">EB Sector Lift (n=${v.sector_traded_n}, w=${v.eb_shrink_weight.toFixed(2)})</div><div class="arith-v">&times; ${v.eb_sector_mult.toFixed(3)}x</div></div>
               <div class="arith-step"><div class="arith-k">7d Velocity Tilt</div><div class="arith-v">&times; ${v.velocity_mult.toFixed(3)}x</div></div>
               <div class="arith-step"><div class="arith-k">Tracked Age Tilt (${v.age_days}d)</div><div class="arith-v">&times; ${v.age_mult.toFixed(3)}x</div></div>
-              <div class="arith-step final"><div class="arith-k">= Final Implied Value (LOOCV P25–P75: ${formatUsd(row.p25_usd)} – ${formatUsd(row.p75_usd)})</div><div class="arith-v" style="color:var(--emerald)">${formatFullUsd(row.implied_value_usd)}</div></div>
+              <div class="arith-step final"><div class="arith-k">= Final Implied Value (LOOCV P25–P75: ${formatUsd(row.p25_usd)} – ${formatUsd(row.p75_usd)})</div><div class="arith-v" style="color:var(--em)">${formatFullUsd(row.implied_value_usd)}</div></div>
             </div>
           </section>
           <section class="panel"><div class="panel-head"><h3 class="panel-title">Closest Size-Tier Comps</h3><span class="panel-sub">Nearest TVL cohort (N=${m.n_traded})</span></div>${compTbl(sizeComps, 'No close size-tier comps.')}</section>

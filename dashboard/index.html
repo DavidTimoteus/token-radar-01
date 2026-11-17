@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Token Launch Radar — Size-Curve Comps &amp; Net-EV Farming Desk</title>
+  <title>Token Launch Radar — Empirical Comps &amp; Net-EV Research Desk</title>
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
@@ -13,7 +13,7 @@
         <div class="brand-mark">TR</div>
         <div>
           <h1 class="brand-title">TOKEN LAUNCH RADAR</h1>
-          <p class="brand-sub">Empirical Size-Curve Valuation &amp; Dollar-Netted Farming Intelligence</p>
+          <p class="brand-sub">Empirical Size-Curve Valuation &amp; TVL-Calibrated Net-EV Farming Desk</p>
         </div>
       </div>
       <div class="header-pills">
@@ -55,9 +55,9 @@
           <select id="chainSelect" class="ctrl-select" aria-label="Filter by chain"><option value="">All Chains</option></select>
           <select id="verdictSelect" class="ctrl-select" aria-label="Filter by verdict">
             <option value="">All Verdicts</option>
-            <option value="FARM">FARM (Net EV &ge; $0)</option>
-            <option value="THIN">THIN (Marginal)</option>
-            <option value="SKIP">SKIP (Negative/Outflow)</option>
+            <option value="FARM">FARM (Net EV &ge; $2)</option>
+            <option value="THIN">THIN (Marginal/Overlap)</option>
+            <option value="SKIP">SKIP (Outflow/Negative)</option>
           </select>
           <select id="growthSelect" class="ctrl-select" aria-label="Filter by 7d growth">
             <option value="">7d Growth: Any</option>
@@ -67,7 +67,7 @@
           </select>
           <select id="sortSelect" class="ctrl-select" aria-label="Sort rows">
             <option value="rank">Sort: Model Rank</option>
-            <option value="netev">Sort: Net $ EV / $1K</option>
+            <option value="netev">Sort: P25 Net EV</option>
             <option value="tvl">Sort: Locked TVL</option>
             <option value="growth">Sort: 7d Growth</option>
             <option value="cost">Sort: 90d Cost</option>
@@ -88,9 +88,9 @@
       </div>
     </section>
     <div class="active-filter-banner" id="activeFilterBanner" hidden><span id="activeFilterText"></span><button type="button" class="banner-clear" id="bannerClearBtn">Clear Filters</button></div>
-    <div class="benchmark-note" id="benchmarkNote" hidden>Clean Token-Family Comps (N=93): deduped by CoinGecko ID, excluding CEX, bridges, liquid staking, and wrapped tokens. Used to fit the Huber power-law size curve and LOOCV diagnostics.</div>
+    <div class="benchmark-note" id="benchmarkNote" hidden>Clean Token-Family Comps (N=93): deduped by CoinGecko ID, excluding CEX, bridges, liquid staking, and wrapped tokens. Separated from pre-token rankings and used to fit the Huber size curve and LOOCV backtest.</div>
     <main id="board" class="table-card"><div class="table-scroll"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></div><div id="emptyState" class="empty-state" hidden>No protocols match the active filter criteria.</div></main>
-    <footer class="footer-bar"><span id="footerSource">Snapshot source: DefiLlama frozen record</span><span>100% offline &middot; Shared dashboard/model.js engine &middot; P25 Net EV per $1,000 deployed</span></footer>
+    <footer class="footer-bar"><span id="footerSource">Snapshot source: DefiLlama frozen record</span><span>100% offline &middot; Shared dashboard/model.js engine &middot; TVL-calibrated ticket Net EV ($1k / $5k / $20k)</span></footer>
   </div>
   <dialog id="detailModal" aria-labelledby="modalTitle">
     <div class="modal-head"><div><h2 class="modal-title" id="modalTitle">Protocol Detail</h2><div class="modal-chains" id="modalChains"></div></div><button type="button" class="modal-close" id="modalCloseBtn" aria-label="Close detail">&times;</button></div>

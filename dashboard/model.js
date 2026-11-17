@@ -1,9 +1,10 @@
-/* Shared empirical size-curve valuation, LOOCV backtest, and dollar-netted farm economics */
+/* Shared empirical size-curve valuation, LOOCV backtest, and TVL-calibrated Net-EV farm model */
 (function (root) {
   const EXCLUDED_CATS = new Set(['CEX', 'Bridge', 'Canonical Bridge', 'Liquid Staking', 'Liquid Restaking', 'Restaked BTC']);
   const EXCH_RE = /^(Binance|Coinbase|Bybit|Kraken|Bitget|OKX|Bitfinex|Gemini)\b/i;
   const WRAP_RE = /\b(wrapped|staked|staking)\b/i;
   const VER_RE = /\s+(?:v\d+(?:\.\d+)?|\d+\.\d+)$/i;
+  const STABLE_OVERLAP_CATS = new Set(['CDP', 'Stablecoin Wrapper']);
   const CHAIN_ORDER = ['Ethereum', 'Arbitrum', 'Base', 'Optimism', 'Solana', 'Sui', 'Hyperliquid L1', 'Monad', 'Polygon', 'Avalanche', 'Binance', 'Mantle', 'Starknet', 'Linea', 'Scroll', 'Berachain', 'Sonic', 'Tron', 'Bitcoin', 'TON', 'Aptos', 'Sei', 'Unichain', 'Ink', 'Plasma', 'Plume Mainnet', 'Flare', 'Bittensor', 'Provenance', 'BSquared', 'Pharos', 'Ripple', 'Stellar'];
   const CHAIN_RANK = Object.fromEntries(CHAIN_ORDER.map((c, i) => [c, i + 1]));
   const ULTRA_LOW = new Set(['Solana', 'Sui', 'Aptos', 'TON', 'Stellar', 'Ripple', 'Tron', 'Bittensor', 'Near']);
@@ -45,11 +46,8 @@
   }
 
   function solveWeightedRidge(X, y, w, ridge = 0.05) {
-    const n = X.length, m = X[0].length;
-    const XtWX = Array.from({ length: m }, () => new Array(m).fill(0)), XtWy = new Array(m).fill(0);
-    for (let i = 0; i < n; i++) {
-      for (let j = 0; j < m; j++) { XtWy[j] += w[i] * X[i][j] * y[i]; for (let k = 0; k < m; k++) XtWX[j][k] += w[i] * X[i][j] * X[i][k]; }
-    }
+    const n = X.length, m = X[0].length, XtWX = Array.from({ length: m }, () => new Array(m).fill(0)), XtWy = new Array(m).fill(0);
+    for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) { XtWy[j] += w[i] * X[i][j] * y[i]; for (let k = 0; k < m; k++) XtWX[j][k] += w[i] * X[i][j] * X[i][k]; }
     for (let j = 1; j < m; j++) XtWX[j][j] += ridge;
     const aug = XtWX.map((row, i) => [...row, XtWy[i]]);
     for (let i = 0; i < m; i++) {
@@ -74,7 +72,7 @@
     return b;
   }
 
-  /** Filters traded snapshot records down to clean, deduped token-family comps (~93 protocols). */
+  /** Filters traded snapshot records down to clean, deduped token-family comps (N=93). */
   function cleanTradedComps(protocols) {
     const byGecko = new Map();
     for (const p of protocols) {
@@ -155,7 +153,7 @@
     };
   }
 
-  /** Computes dollar-netted EV per $1,000 deployed at P25 low-end, FARM/THIN/SKIP verdict, and timed steps. */
+  /** Computes TVL-calibrated ticket sizing ($1k/$5k/$20k), P25 & Mid Net EV, min break-even deposit, and FARM/THIN/SKIP verdict. */
   function computeNetFarmVerdict(p, valuation, sortedChains) {
     const cat = p.category || 'DeFi';
     const farmChain = sortedChains.find((c) => ULTRA_LOW.has(c)) || sortedChains.find((c) => LIQUID_L2.has(c)) || sortedChains[0] || 'Ethereum';
@@ -163,47 +161,68 @@
     const fee = getChainFeeProfile(farmChain);
     const setupGas = roundTo(fee.txGas * 2 + (farmChain !== 'Ethereum' ? fee.bridge : 0), 2);
     const totalCost90d = roundTo(setupGas + fee.txGas * 6, 2);
-    const p25Per1k = roundTo(valuation.p25_usd * 0.05 * (1000 / Math.max(p.tvl_usd, 5e6)), 2);
-    const netEvP25 = roundTo(p25Per1k - totalCost90d, 2);
+
+    const ticket = p.tvl_usd > 300e6 ? 20000 : p.tvl_usd >= 50e6 ? 5000 : 1000;
+    const tvlFloor = Math.max(p.tvl_usd, 5e6);
+    const p25RecUsd = roundTo(valuation.p25_usd * 0.05 * (ticket / tvlFloor), 2);
+    const midRecUsd = roundTo(valuation.raw_implied_usd * 0.05 * (ticket / tvlFloor), 2);
+    const netEvP25 = roundTo(p25RecUsd - totalCost90d, 2);
+    const netEvMid = roundTo(midRecUsd - totalCost90d, 2);
+    const minDepositUsd = Math.ceil((totalCost90d * tvlFloor) / Math.max(1, valuation.p25_usd * 0.05));
     const ch7 = p.change_7d ?? 0;
+    const stableOverlap = STABLE_OVERLAP_CATS.has(cat);
 
-    let verdict = 'THIN', reason = `Marginal P25 Net EV ($${netEvP25.toFixed(2)}/$1k) on ${farmChain}; needs median outcome or larger size`;
-    if (ch7 < -15) { verdict = 'SKIP'; reason = `7d TVL outflow (${ch7.toFixed(1)}%) indicates mercenary exit; wait for inflows`; }
-    else if (p.tvl_usd < 8e6) { verdict = 'SKIP'; reason = `Sub-$8M TVL ($${(p.tvl_usd / 1e6).toFixed(1)}M) carries high slippage & pool depth risk`; }
-    else if (netEvP25 < -5) { verdict = 'SKIP'; reason = `Negative P25 Net EV ($${netEvP25.toFixed(2)}/$1k): ${farmChain} 90d cost ($${totalCost90d.toFixed(2)}) > P25 share ($${p25Per1k.toFixed(2)})`; }
-    else if (netEvP25 >= 0) { verdict = 'FARM'; reason = `Positive P25 Net EV (+$${netEvP25.toFixed(2)}/$1k) via ${farmChain} with $${totalCost90d.toFixed(2)} 90d cost`; }
+    let verdict = 'THIN';
+    let reason = `Marginal P25 Net EV ($${netEvP25.toFixed(2)} on $${(ticket / 1e3).toFixed(0)}k) on ${farmChain}; min P25 break-even deposit $${minDepositUsd.toLocaleString('en-US')}`;
+    if (ch7 < -10) {
+      verdict = 'SKIP';
+      reason = `7d TVL outflow (${ch7.toFixed(1)}%) indicates mercenary exit; wait for two positive weekly snapshots`;
+    } else if (p.tvl_usd < 8e6) {
+      verdict = 'SKIP';
+      reason = `Sub-$8M TVL ($${(p.tvl_usd / 1e6).toFixed(1)}M) carries pool depth & slippage risk`;
+    } else if (netEvP25 < -2) {
+      verdict = 'SKIP';
+      reason = `${farmChain} 90d cost ($${totalCost90d.toFixed(2)}) exceeds P25 share ($${p25RecUsd.toFixed(2)}) at $${(ticket / 1e3).toFixed(0)}k ticket (min deposit $${minDepositUsd.toLocaleString('en-US')})`;
+    } else if (stableOverlap) {
+      verdict = 'THIN';
+      reason = `${cat} mechanism: verify canonical token/ecosystem overlap before scaling ($${(ticket / 1e3).toFixed(0)}k P25 Net +$${netEvP25.toFixed(2)})`;
+    } else if (netEvP25 >= 2) {
+      verdict = 'FARM';
+      reason = `Positive P25 Net EV (+$${netEvP25.toFixed(2)} | Mid +$${netEvMid.toFixed(2)}) at $${(ticket / 1e3).toFixed(0)}k ticket on ${farmChain} ($${totalCost90d.toFixed(2)} cost)`;
+    }
 
-    const ticket = p.tvl_usd >= 25e6 ? 1000 : 500;
-    const beFdvUsd = Math.round(totalCost90d / Math.max(1e-8, (1000 / Math.max(p.tvl_usd, 5e6)) * 0.05));
-    const beLabel = beFdvUsd >= 1e9 ? `$${(beFdvUsd / 1e9).toFixed(2)}B` : `$${(beFdvUsd / 1e6).toFixed(1)}M`;
+    const tktFmt = `$${ticket.toLocaleString('en-US')}`;
+    const minFmt = minDepositUsd >= 1000 ? `$${(minDepositUsd / 1e3).toFixed(1)}k` : `$${minDepositUsd}`;
+    const beFdvUsd = Math.round((totalCost90d * tvlFloor) / (ticket * 0.05));
+    const beLbl = beFdvUsd >= 1e9 ? `$${(beFdvUsd / 1e9).toFixed(2)}B` : `$${(beFdvUsd / 1e6).toFixed(1)}M`;
 
-    let a1 = `Deploy $${ticket.toLocaleString('en-US')} liquidity into ${p.name}'s top ${cat} pool on ${farmChain} (${((ticket / p.tvl_usd) * 100).toFixed(4)}% share)`;
+    let a1 = `Deploy ${tktFmt} liquidity into ${p.name}'s top ${cat} pool on ${farmChain} (${((ticket / p.tvl_usd) * 100).toFixed(4)}% pool share)`;
     let a2 = `Maintain organic bi-weekly activity on ${p.name} (${secChain}) across 6 snapshots`;
     if (/Curator|Allocator|Yield/.test(cat)) {
-      a1 = `Deposit $${ticket.toLocaleString('en-US')} USDC or LST into ${p.name}'s curated vault on ${farmChain}`;
-      a2 = `Roll vault receipt across ${secChain} or compound every 14 days for epoch duration weight`;
+      a1 = `Deposit ${tktFmt} USDC or LST into ${p.name}'s curated vault on ${farmChain}`;
+      a2 = `Roll vault receipt across ${secChain} or compound every 14 days for duration weight`;
     } else if (/Derivatives|Prediction|Options/.test(cat)) {
-      a1 = `Seed $${ticket.toLocaleString('en-US')} margin on ${p.name} (${farmChain}) and post 5+ weekly maker limit orders`;
+      a1 = `Seed ${tktFmt} margin on ${p.name} (${farmChain}) and post 5+ weekly maker limit orders`;
       a2 = `Hold balanced OI across 2 active ${p.name} markets over 6 weekly funding epochs`;
     } else if (/Dexs|Liquidity/.test(cat)) {
-      a1 = `Provide $${ticket.toLocaleString('en-US')} tight-range (+/-2%) LP on ${p.name} (${farmChain})`;
+      a1 = `Provide ${tktFmt} tight-range (+/-2%) LP on ${p.name} (${farmChain})`;
       a2 = `Rebalance out-of-range ticks and route organic swaps bi-weekly on ${secChain}`;
     } else if (/Lending|CDP|Collateral/.test(cat)) {
-      a1 = `Supply $${ticket.toLocaleString('en-US')} collateral on ${p.name} (${farmChain}) and borrow at <=45% LTV (HF > 1.85)`;
+      a1 = `Supply ${tktFmt} collateral on ${p.name} (${farmChain}) and borrow at <=45% LTV (HF > 1.85)`;
       a2 = `Monitor oracle buffer weekly and deploy borrowed liquidity into ${p.name}'s ${secChain} pool`;
     } else if (/RWA|Basis|CeDeFi|Payments/.test(cat)) {
-      a1 = `Mint $${ticket.toLocaleString('en-US')} yield-bearing receipt on ${p.name} (${farmChain}) in one clean wallet`;
+      a1 = `Mint ${tktFmt} yield-bearing receipt on ${p.name} (${farmChain}) in one clean wallet`;
       a2 = `Hold uninterrupted through 3 monthly settlement cycles without early redemption`;
     }
 
     const steps = [];
     if (verdict === 'SKIP') steps.push({ text: `SKIP GATE: ${reason}. Cap test size at $150 or defer. (Cost: $0.00 gate | Time: 3 min check)`, cost: '$0.00 gate', time: '3 min check', gas_usd: 0 });
-    steps.push({ text: `${a1}. (Cost: $${setupGas.toFixed(2)} setup | Time: 10 min setup)`, cost: `$${setupGas.toFixed(2)} setup`, time: '10 min setup', gas_usd: setupGas });
+    steps.push({ text: `${a1}. (Cost: $${setupGas.toFixed(2)} setup + ${tktFmt} | Time: 10 min setup)`, cost: `$${setupGas.toFixed(2)} setup`, time: '10 min setup', gas_usd: setupGas });
     steps.push({ text: `${a2}. (Cost: $${(fee.txGas * 5).toFixed(2)} cycles | Time: 5 min bi-weekly)`, cost: `$${(fee.txGas * 5).toFixed(2)} cycles`, time: '5 min bi-weekly', gas_usd: roundTo(fee.txGas * 5, 2) });
-    steps.push({ text: `Hold 90d (${valuation.age_days}d tracked); P25 $${p25Per1k.toFixed(2)}/$1k - $${totalCost90d.toFixed(2)} cost = $${netEvP25.toFixed(2)} Net EV (BE FDV ${beLabel}). (Cost: $${fee.txGas.toFixed(2)} exit | Time: 2 min/wk)`, cost: `$${fee.txGas.toFixed(2)} exit`, time: '2 min/wk', gas_usd: fee.txGas });
+    steps.push({ text: `Hold 90d (${valuation.age_days}d tracked); ${tktFmt} ticket yields $${p25RecUsd.toFixed(2)} P25 / $${midRecUsd.toFixed(2)} Mid -> Net $${netEvP25.toFixed(2)} (Min ${minFmt}, BE FDV ${beLbl}). (Cost: $${fee.txGas.toFixed(2)} exit | Time: 2 min/wk)`, cost: `$${fee.txGas.toFixed(2)} exit`, time: '2 min/wk', gas_usd: fee.txGas });
     if (steps.length < 4) steps.push({ text: `Claim ${p.name} epoch badges and revoke stale approvals on ${farmChain} post-snapshot. (Cost: $${fee.txGas.toFixed(2)} revoke | Time: 4 min exit)`, cost: `$${fee.txGas.toFixed(2)} revoke`, time: '4 min exit', gas_usd: fee.txGas });
 
-    return { farm_chain: farmChain, verdict, verdict_reason: reason, p25_airdrop_usd_per_1k: p25Per1k, est_cost_90d_usd: totalCost90d, net_ev_p25_usd: netEvP25, breakeven_fdv_usd: beFdvUsd, steps };
+    return { farm_chain: farmChain, verdict, verdict_reason: reason, ticket_usd: ticket, min_deposit_usd: minDepositUsd, p25_airdrop_rec_usd: p25RecUsd, mid_airdrop_rec_usd: midRecUsd, est_cost_90d_usd: totalCost90d, net_ev_p25_usd: netEvP25, net_ev_mid_usd: netEvMid, breakeven_fdv_usd: beFdvUsd, steps };
   }
 
   function buildRadarPayload(snapshot) {
@@ -229,9 +248,11 @@
         rank: idx + 1, slug: it.p.slug, name: it.p.name, category: it.cat, chains: it.chains, farm_chain: it.farm.farm_chain,
         tvl_usd: it.p.tvl_usd, change_7d: it.p.change_7d, listed_at: it.p.listed_at, in_watchlist: it.inWl,
         verdict: it.farm.verdict, verdict_reason: it.farm.verdict_reason, implied_value_usd: val,
-        p25_usd: it.valuation.p25_usd, p75_usd: it.valuation.p75_usd, p25_airdrop_usd_per_1k: it.farm.p25_airdrop_usd_per_1k,
-        est_cost_90d_usd: it.farm.est_cost_90d_usd, net_ev_p25_usd: it.farm.net_ev_p25_usd, breakeven_fdv_usd: it.farm.breakeven_fdv_usd,
-        age_days: it.valuation.age_days, valuation: it.valuation, farm_steps: it.farm.steps.map((s) => s.text), step_meta: it.farm.steps,
+        p25_usd: it.valuation.p25_usd, p75_usd: it.valuation.p75_usd, ticket_usd: it.farm.ticket_usd, min_deposit_usd: it.farm.min_deposit_usd,
+        p25_airdrop_rec_usd: it.farm.p25_airdrop_rec_usd, mid_airdrop_rec_usd: it.farm.mid_airdrop_rec_usd,
+        est_cost_90d_usd: it.farm.est_cost_90d_usd, net_ev_p25_usd: it.farm.net_ev_p25_usd, net_ev_mid_usd: it.farm.net_ev_mid_usd,
+        breakeven_fdv_usd: it.farm.breakeven_fdv_usd, age_days: it.valuation.age_days, valuation: it.valuation,
+        farm_steps: it.farm.steps.map((s) => s.text), step_meta: it.farm.steps,
       };
     });
 
