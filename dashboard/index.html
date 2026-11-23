@@ -1,103 +1,126 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Token Launch Radar — Empirical Comps &amp; Net-EV Research Desk</title>
-  <link rel="stylesheet" href="app.css" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Launch Radar — Empirical Comps and Net-EV Research Desk</title>
+<link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <div class="shell">
-    <header class="topbar">
-      <div class="brand-row">
-        <div class="brand-mark">TR</div>
-        <div>
-          <h1 class="brand-title">TOKEN LAUNCH RADAR</h1>
-          <p class="brand-sub">Empirical Size-Curve Valuation &amp; TVL-Calibrated Net-EV Farming Desk</p>
-        </div>
+<div class="shell">
+
+  <header class="card header">
+    <div class="brand">
+      <span class="mark">TR</span>
+      <div>
+        <h1>Token Launch Radar</h1>
+        <p class="subtitle">Empirical Size-Curve Valuation and TVL-Calibrated Net-EV Farming Desk</p>
       </div>
-      <div class="header-pills">
-        <span class="pill">Snapshot <strong id="pillSnapshotDate" class="mono">--</strong></span>
-        <span class="pill pill-accent">Watchlist <strong id="pillWatchlist" class="mono">-- / --</strong></span>
-        <span class="pill pill-model">Comps <strong id="pillModelMeta" class="mono">LOOCV N=--</strong></span>
-      </div>
-    </header>
-    <section class="hero-grid" aria-label="KPIs and comps size curve">
-      <div class="kpi-grid">
-        <article class="kpi-card"><div class="kpi-label">Watchlist Floor Coverage</div><div class="kpi-value" id="kpiWatchlist">--</div><div class="kpi-sub" id="kpiWatchlistSub">--</div></article>
-        <article class="kpi-card"><div class="kpi-label">Pre-Token Radar Universe</div><div class="kpi-value" id="kpiUniverse">--</div><div class="kpi-sub" id="kpiUniverseSub">--</div></article>
-        <article class="kpi-card"><div class="kpi-label">Pipeline Value &amp; Agg. TVL</div><div class="kpi-value" id="kpiImplied">--</div><div class="kpi-sub" id="kpiTvlSub">--</div></article>
-        <article class="kpi-card"><div class="kpi-label">LOOCV Size-Curve Accuracy</div><div class="kpi-value" id="kpiModelFit">--</div><div class="kpi-sub" id="kpiModelSub">--</div></article>
-      </div>
-      <aside class="chart-card" aria-label="Comps size curve scatter">
-        <div class="chart-head">
-          <span class="chart-title">Comps Size Curve (Log10 MCap vs TVL, N=<span id="legTradedN">--</span>)</span>
-          <div class="chart-legend">
-            <span class="leg-item"><i class="dot dot-traded"></i>Clean Comps</span>
-            <span class="leg-item"><i class="dot dot-prime"></i>Top Watchlist</span>
-            <span class="leg-item"><i class="dot dot-line"></i>Huber Curve &amp; P25&ndash;P75</span>
-          </div>
-        </div>
-        <div id="compsChartWrap" class="chart-wrap"></div>
-      </aside>
-    </section>
-    <section class="toolbar" aria-label="Universe tabs and filters">
-      <div class="toolbar-top">
-        <div class="view-tabs" role="tablist">
-          <button type="button" class="tab-btn active" data-view="radar" role="tab" aria-selected="true">Pre-Token Radar (<span id="tabRadarCount">--</span>)</button>
-          <button type="button" class="tab-btn" data-view="watchlist" role="tab" aria-selected="false">Watchlist (<span id="tabWlCount">--</span>)</button>
-          <button type="button" class="tab-btn" data-view="early" role="tab" aria-selected="false">Early &lt;$50M (<span id="tabEarlyCount">--</span>)</button>
-          <button type="button" class="tab-btn" data-view="live" role="tab" aria-selected="false">Traded Comps (<span id="tabLiveCount">--</span>)</button>
-        </div>
-        <div class="controls-row">
-          <input id="searchInput" class="ctrl-input" type="search" placeholder="Search protocol, sector, chain (/)" aria-label="Search protocols" />
-          <select id="categorySelect" class="ctrl-select" aria-label="Filter by sector"><option value="">All Sectors</option></select>
-          <select id="chainSelect" class="ctrl-select" aria-label="Filter by chain"><option value="">All Chains</option></select>
-          <select id="verdictSelect" class="ctrl-select" aria-label="Filter by verdict">
-            <option value="">All Verdicts</option>
-            <option value="FARM">FARM (Net EV &ge; $2)</option>
-            <option value="THIN">THIN (Marginal/Overlap)</option>
-            <option value="SKIP">SKIP (Outflow/Negative)</option>
-          </select>
-          <select id="growthSelect" class="ctrl-select" aria-label="Filter by 7d growth">
-            <option value="">7d Growth: Any</option>
-            <option value="pos">Positive (&gt; 0%)</option>
-            <option value="hot">Strong (&ge; +5%)</option>
-            <option value="stable">Stable (&ge; -10%)</option>
-          </select>
-          <select id="sortSelect" class="ctrl-select" aria-label="Sort rows">
-            <option value="rank">Sort: Model Rank</option>
-            <option value="netev">Sort: P25 Net EV</option>
-            <option value="tvl">Sort: Locked TVL</option>
-            <option value="growth">Sort: 7d Growth</option>
-            <option value="cost">Sort: 90d Cost</option>
-            <option value="age">Sort: Tracked Age</option>
-          </select>
-        </div>
-      </div>
-      <div class="chip-row" id="quickChips">
-        <span class="chip-label">Liquid Chains</span>
-        <button type="button" class="chip active" data-chain="">All</button>
-        <button type="button" class="chip" data-chain="Ethereum">Ethereum</button>
-        <button type="button" class="chip" data-chain="Arbitrum">Arbitrum</button>
-        <button type="button" class="chip" data-chain="Base">Base</button>
-        <button type="button" class="chip" data-chain="Solana">Solana</button>
-        <button type="button" class="chip" data-chain="Monad">Monad</button>
-        <button type="button" class="chip" data-chain="Sui">Sui</button>
-        <button type="button" class="chip chip-reset" id="resetBtn">Reset All</button>
-      </div>
-    </section>
-    <div class="active-filter-banner" id="activeFilterBanner" hidden><span id="activeFilterText"></span><button type="button" class="banner-clear" id="bannerClearBtn">Clear Filters</button></div>
-    <div class="benchmark-note" id="benchmarkNote" hidden>Clean Token-Family Comps (N=93): deduped by CoinGecko ID, excluding CEX, bridges, liquid staking, and wrapped tokens. Separated from pre-token rankings and used to fit the Huber size curve and LOOCV backtest.</div>
-    <main id="board" class="table-card"><div class="table-scroll"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></div><div id="emptyState" class="empty-state" hidden>No protocols match the active filter criteria.</div></main>
-    <footer class="footer-bar"><span id="footerSource">Snapshot source: DefiLlama frozen record</span><span>100% offline &middot; Shared dashboard/model.js engine &middot; TVL-calibrated ticket Net EV ($1k / $5k / $20k)</span></footer>
+    </div>
+    <div class="pills">
+      <span class="pill">Snapshot <b id="pillDate">—</b></span>
+      <span class="pill">Watchlist <b id="pillWatch">—</b></span>
+      <span class="pill">Comps <b>LOOCV N=93</b></span>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis">
+    <div class="card kpi">
+      <h2>Watchlist Floor Coverage</h2>
+      <div class="kpi-value" id="kpiWatch">—</div>
+      <p>100% of the floor at or above $50M watchlist.</p>
+    </div>
+    <div class="card kpi">
+      <h2>Pre-Token Radar Universe</h2>
+      <div class="kpi-value" id="kpiRows">—</div>
+      <p id="kpiVerdicts">—</p>
+    </div>
+    <div class="card kpi">
+      <h2>Pipeline Value and Aggregate TVL</h2>
+      <div class="kpi-value" id="kpiValue">—</div>
+      <p id="kpiTvl">—</p>
+    </div>
+    <div class="card kpi">
+      <h2>LOOCV Size-Curve Accuracy</h2>
+      <div class="kpi-value" id="kpiFold">—</div>
+      <p id="kpiCurve">—</p>
+    </div>
+  </section>
+
+  <section class="card toolbar">
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-view="radar">Pre-Token Radar <span class="count" id="countRadar">—</span></button>
+      <button class="tab" data-view="watchlist">Watchlist <span class="count" id="countWatch">—</span></button>
+      <button class="tab" data-view="early">Early under $50M <span class="count" id="countEarly">—</span></button>
+      <button class="tab" data-view="live">Traded Comps <span class="count" id="countLive">—</span></button>
+    </div>
+    <div class="controls">
+      <input id="search" type="text" placeholder="Search protocol, sector, chain (/)">
+      <select id="sectorSel"><option value="">All Sectors</option></select>
+      <select id="chainSel"><option value="">All Chains</option></select>
+      <select id="verdictSel">
+        <option value="">All Verdicts</option>
+        <option value="FARM">FARM (Net EV &ge; $2)</option>
+        <option value="THIN">THIN (Marginal/Overlap)</option>
+        <option value="SKIP">SKIP (Outflow/Negative)</option>
+      </select>
+      <select id="growthSel">
+        <option value="">7d Growth: Any</option>
+        <option value="pos">Positive (&gt; 0%)</option>
+        <option value="strong">Strong (&ge; +5%)</option>
+        <option value="stable">Stable (&ge; -10%)</option>
+      </select>
+      <select id="sortSel">
+        <option value="rank">Sort: Model Rank</option>
+        <option value="implied">Sort: Expected Value</option>
+        <option value="netev">Sort: P25 Net EV</option>
+        <option value="tvl">Sort: Locked TVL</option>
+        <option value="chg">Sort: 7d Growth</option>
+        <option value="cost">Sort: 90d Cost</option>
+        <option value="age">Sort: Tracked Age</option>
+      </select>
+    </div>
+    <div class="chips">
+      <span class="chips-label">Liquid Chains:</span>
+      <span id="chainChips"></span>
+      <button id="resetAll" class="reset">Reset All</button>
+    </div>
+  </section>
+
+  <section class="card legend" id="legend">
+    <h2>How to read this board</h2>
+    <p>Rank is by Implied Value. Implied Value equals Expected Value, which is the size-curve value (what a token would be worth at this TVL, fitted from traded comps) times Launch Odds. P25 is the conservative 25th-percentile estimate. Net EV is the P25 airdrop share for the recommended ticket minus the ninety-day farming cost — the P25 value if the token launches.</p>
+    <p><span class="badge farm">FARM</span> means P25 Net EV &ge; $2. <span class="badge thin">THIN</span> means marginal, or check overlap first. <span class="badge skip">SKIP</span> means 7d TVL outflow worse than -10%, TVL under $8M, or P25 Net EV under -$2. Click any row for Why this rank, the full valuation arithmetic, and the farm plan.</p>
+    <p>Launch Odds is the fitted probability that a pre-token protocol has launched a token by the snapshot date, from the snapshot&rsquo;s own launched versus pre-token record by age and TVL tier (a lower-bound proxy — some pre-token protocols may launch later). Implied Value equals Size-Curve Value times Launch Odds; rank is by Implied Value.</p>
+    <p id="modelAccuracy">Model check: loading…</p>
+  </section>
+
+  <div class="banner" id="banner" hidden>
+    <span id="bannerText"></span>
+    <button id="clearFilters" class="reset">Clear Filters</button>
   </div>
-  <dialog id="detailModal" aria-labelledby="modalTitle">
-    <div class="modal-head"><div><h2 class="modal-title" id="modalTitle">Protocol Detail</h2><div class="modal-chains" id="modalChains"></div></div><button type="button" class="modal-close" id="modalCloseBtn" aria-label="Close detail">&times;</button></div>
-    <div class="modal-body" id="modalBody"></div>
-  </dialog>
-  <script src="../data.js"></script>
-  <script src="model.js"></script>
-  <script src="app.js"></script>
+  <p class="note" id="liveNote" hidden>Clean Token-Family Comps (N=93): deduped by CoinGecko ID, excluding CEX, bridges, liquid staking, and wrapped tokens. Separated from pre-token rankings and used to fit the Huber size curve and LOOCV backtest.</p>
+
+  <section class="card table-wrap">
+    <table id="board">
+      <thead id="boardHead"></thead>
+      <tbody id="boardBody"></tbody>
+    </table>
+    <p class="empty" id="emptyState" hidden>No protocols match the active filter criteria.</p>
+  </section>
+
+  <footer class="card footer" id="footer">—</footer>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal">
+    <button class="modal-close" id="modalClose">×</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script src="../data.js"></script>
+<script src="model.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
