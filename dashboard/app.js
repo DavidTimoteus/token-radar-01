@@ -17,7 +17,7 @@
   function growthOk(r) {
     var g = state.growth, c = r.change_7d;
     if (!g) return true;
-    if (c === null || c === undefined) return false;
+    if (c == null) return false;
     if (g === 'pos') return c > 0;
     if (g === 'strong') return c >= 5;
     return c >= -10;
@@ -55,7 +55,7 @@
   function sortVal(r, key) {
     if (key === 'netev') return r.net_ev_p25_usd;
     if (key === 'tvl') return r.tvl_usd;
-    if (key === 'chg') return r.change_7d === null || r.change_7d === undefined ? -9999 : r.change_7d;
+    if (key === 'chg') return r.change_7d == null ? -9999 : r.change_7d;
     if (key === 'age') return r.age_days;
     if (key === 'cost') return r.est_cost_90d_usd;
     if (key === 'mcap') return r.mcap_usd;
@@ -87,7 +87,7 @@
   }
 
   function chgCell(c) {
-    if (c === null || c === undefined) return '<td class="num flat">N/A</td>';
+    if (c == null) return '<td class="num flat">N/A</td>';
     var cls = c > 0.05 ? 'pos' : c < -0.05 ? 'neg' : 'flat';
     return '<td class="num ' + cls + '">' + M.pctText(c) + '</td>';
   }
@@ -159,7 +159,7 @@
       var total = live ? D.traded.length : D.rows.length;
       var sumVal = 0, sumTvl = 0;
       list.forEach(function (r) { sumVal += live ? r.mcap_usd : r.implied_value_usd; sumTvl += r.tvl_usd; });
-      $('bannerText').textContent = filters.join(' · ') + ' — ' + list.length + ' of ' + total +
+      $('bannerText').textContent = filters.join(' · ') + ' · ' + list.length + ' of ' + total +
         ' · ' + mc(sumVal) + (live ? ' market cap' : ' implied') + ' · ' + mc(sumTvl) + ' TVL';
     }
     document.querySelectorAll('#tabs .tab').forEach(function (t) {
@@ -175,15 +175,14 @@
   function panel(t, s, body) { return '<div class="panel"><h3>' + t + '</h3><p class="panel-sub">' + s + '</p>' + body + '</div>'; }
 
   function closestComps(row) {
-    var scored = D.traded.map(function (t) {
-      return { t: t, d: Math.abs(Math.log10(t.tvl_usd) - Math.log10(row.tvl_usd)) };
-    });
-    scored.sort(function (a, b) { return a.d - b.d; });
-    return scored.slice(0, 3).map(function (s) { return s.t; });
+    var lt = Math.log10(row.tvl_usd);
+    return D.traded.slice().sort(function (a, b) {
+      return Math.abs(Math.log10(a.tvl_usd) - lt) - Math.abs(Math.log10(b.tvl_usd) - lt);
+    }).slice(0, 3);
   }
 
   function compTable(list) {
-    return '<table class="mini"><thead><tr><th>Protocol</th><th>TVL</th><th>Market Cap</th><th>Ratio</th></tr></thead><tbody>' +
+    return '<table class="mini"><thead><tr><th>Protocol</th><th>TVL</th><th>MCap</th><th>Ratio</th></tr></thead><tbody>' +
       list.map(function (t) {
         return '<tr><td>' + esc(t.name) + '</td><td class="num">' + mc(t.tvl_usd) + '</td><td class="num">' + mc(t.mcap_usd) + '</td><td class="num">' + t.mcap_tvl.toFixed(2) + 'x</td></tr>';
       }).join('') + '</tbody></table>';
@@ -193,65 +192,67 @@
     return text.replace(/\s*\([^)]*\)\s*$/, '');
   }
 
+  function modalHead(h, tags, whyT, whyP) {
+    return '<h2>' + h + '</h2><div>' + tags + '</div><div class="why"><h3>' + whyT + '</h3><p>' + whyP + '</p></div>';
+  }
+
   function openModal(row, list) {
     var v = row.valuation, m = D.model;
     var drivers = [];
-    if (v.sector_traded > 0) drivers.push('a sector lift of ' + v.sector_mult.toFixed(2) + 'x');
-    if (v.velocity_mult !== 1) drivers.push('a 7d velocity of ' + v.velocity_mult.toFixed(2) + 'x');
-    if (v.age_mult !== 1) drivers.push('an age tilt of ' + v.age_mult.toFixed(2) + 'x');
-    var driverText = '';
-    if (drivers.length === 1) driverText = ' with ' + drivers[0];
-    else if (drivers.length === 2) driverText = ' with ' + drivers[0] + ' and ' + drivers[1];
-    else if (drivers.length > 2) driverText = ' with ' + drivers.slice(0, -1).join(', ') + ', and ' + drivers[drivers.length - 1];
-    var idx = -1;
-    list.forEach(function (r, i) { if (r.slug === row.slug) idx = i; });
-    var gap;
+    if (v.sector_traded > 0) drivers.push('a sector lift of ' + v.sector_mult.toFixed(2) + ' times');
+    if (v.velocity_mult !== 1) drivers.push('a seven-day velocity of ' + v.velocity_mult.toFixed(2) + ' times');
+    if (v.age_mult !== 1) drivers.push('an age tilt of ' + v.age_mult.toFixed(2) + ' times');
+    var driverText = drivers.length ? ' with ' + (drivers.length > 1 ? drivers.slice(0, -1).join(', ') + ', and ' + drivers[drivers.length - 1] : drivers[0]) : '';
+    var idx = list ? list.indexOf(row) : -1;
+    var gapText = '';
     if (idx >= 0 && idx + 1 < list.length) {
       var next = list[idx + 1];
-      gap = ' It sits ' + mc(row.implied_value_usd - next.implied_value_usd) + ' above rank #' + next.rank + ' (' + next.slug + ', ' + mc(next.implied_value_usd) + ').';
-    } else {
-      gap = ' It is the lowest-ranked row in this view.';
+      gapText = ' It sits ' + mc(row.implied_value_usd - next.implied_value_usd) + ' above rank #' + next.rank + ' (' + next.slug + ', ' + mc(next.implied_value_usd) + ').';
+    } else if (idx >= 0) {
+      gapText = ' It is the lowest-ranked row in this view.';
     }
-    var why = 'Rank #' + row.rank + ' ranks here because its implied value of ' + mc(row.implied_value_usd) +
-      ' equals its size-curve value of ' + mc(row.sizecurve_value_usd) + ' (P25–P75 ' + mc(row.p25_usd) + '–' + mc(row.p75_usd) + ')' +
-      ' times ' + Math.round(row.launch_odds * 100) + '% launch odds, fitted by age and TVL tier from the snapshot\u2019s launched versus pre-token record,' +
-      ' from ' + mc(row.tvl_usd) + ' of TVL' + driverText + '. Verdict: ' + row.verdict + ' — ' + row.verdict_reason +
-      ' P25 net EV is ' + sm(row.net_ev_p25_usd) + ' on ' + row.farm_chain + ' after ' + m2(row.est_cost_90d_usd) +
-      ' of 90d cost, the P25 value if the token launches.' + gap;
+    var why = 'Rank #' + row.rank + ': implied ' + mc(row.implied_value_usd) +
+      ' = size-curve ' + mc(row.sizecurve_value_usd) + ' (P25–P75 ' + mc(row.p25_usd) + '–' + mc(row.p75_usd) + ')' +
+      ' × ' + Math.round(row.launch_odds * 100) + '% launch odds (age×TVL cells + category + 7d change)' +
+      ', from ' + mc(row.tvl_usd) + ' of TVL' + driverText +
+      '. Verdict: ' + row.verdict + ' — ' + row.verdict_reason +
+      ' P25 net EV ' + sm(row.net_ev_p25_usd) + ' on ' + row.farm_chain + ' after ' + m2(row.est_cost_90d_usd) + ' of 90d cost, the P25 value if the token launches.' + gapText;
     var mid1 = (row.net_ev_mid_usd < 0 ? '-' : '+') + '$' + Math.abs(row.net_ev_mid_usd).toFixed(1);
     var sectorComps = D.traded.filter(function (t) { return t.category === row.category; }).slice(0, 3);
+    var secTr = 0;
+    m.sectors.forEach(function (s) { if (s.category === row.category) secTr = s.traded; });
+    var secPre = D.rows.filter(function (r) { return r.category === row.category; }).length;
     $('modalBody').innerHTML =
-      '<h2>#' + row.rank + ' ' + esc(row.name) + ' ' +
+      modalHead('#' + row.rank + ' ' + esc(row.name) + ' ' +
       (row.in_watchlist ? '<span class="badge watch">Watchlist</span> ' : '') +
       '<span class="badge ' + row.verdict.toLowerCase() + '">' + row.verdict + '</span> ' +
-      '<span class="tag">' + esc(row.category) + '</span></h2>' +
-      '<div>' + chainTags(row, 7) + '</div>' +
-      '<div class="why"><h3>Why this rank</h3><p>' + esc(why) + '</p></div>' +
+      '<span class="tag">' + esc(row.category) + '</span>',
+      chainTags(row, 7), 'Why this rank', esc(why)) +
       '<div class="stats4">' +
       statCard('Locked TVL', mc(row.tvl_usd), M.pctText(row.change_7d) + ' · ' + row.age_days + 'd') +
       statCard('Implied Value (P25–P75)', mc(row.implied_value_usd), mc(row.p25_usd) + '–' + mc(row.p75_usd)) +
-      statCard('Rec. Ticket and Min BE', mf(row.ticket_usd), 'min ' + M.depositText(row.min_deposit_usd)) +
-      statCard('Net EV (P25 / Mid)', sm(row.net_ev_p25_usd), 'mid ' + mid1 + ' · ' + esc(row.farm_chain) + ' · ' + m2(row.est_cost_90d_usd) + ' 90d') +
+      statCard('Rec. Ticket / Min BE', mf(row.ticket_usd), 'min ' + M.depositText(row.min_deposit_usd)) +
+      statCard('Net EV (P25 / Mid)', sm(row.net_ev_p25_usd), 'mid ' + mid1 + ' · ' + row.farm_chain + ' · ' + m2(row.est_cost_90d_usd) + ' 90d') +
       '</div>' +
       '<div class="detail2"><div>' +
       panel('Empirical Size-Curve Valuation', 'LOOCV ' + m.oos_fold_err + 'x · ρ ' + m.spearman_rho + ' · N=' + m.traded_count,
         '<div class="valgrid">' +
         valRow('Power-law size base (slope ' + m.slope + ')', mc(v.size_base_usd)) +
-        valRow('Sector lift — ' + esc(row.category) + ' (n=' + v.sector_traded + ', w=' + v.shrink_weight.toFixed(2) + ')', v.sector_mult.toFixed(2) + 'x') +
+        valRow('Sector lift (n=' + v.sector_traded + ', w=' + v.shrink_weight.toFixed(2) + ')', v.sector_mult.toFixed(2) + 'x') +
         valRow('7d velocity tilt', v.velocity_mult.toFixed(2) + 'x') +
-        valRow('Tracked age tilt · ' + v.age_days + 'd', v.age_mult.toFixed(2) + 'x') +
+        valRow('Age tilt · ' + v.age_days + 'd', v.age_mult.toFixed(2) + 'x') +
         valRow('Size-curve value (P25–P75)', mc(v.raw_usd) + ' (' + mc(v.p25_usd) + '–' + mc(v.p75_usd) + ')') +
         valRow('Launch odds', row.launch_odds.toFixed(3)) +
         valRow('Implied value = expected value', mc(row.implied_value_usd)) +
         '</div>') +
       panel('Closest Size-Tier Comps', 'Nearest TVL cohort', compTable(closestComps(row))) +
-      panel('Sector Comps', esc(row.category),
-        sectorComps.length ? compTable(sectorComps) : '<p>No direct traded sector comp — shrinkage reverts fully to the size curve.</p>') +
+      panel('Sector Comps', esc(row.category) + ' · ' + secTr + '/' + (secTr + secPre) + ' launched',
+        sectorComps.length ? compTable(sectorComps) : '<p>No traded comp in this sector — full shrinkage to the size curve.</p>') +
       '</div><div>' +
       panel('Dollar-Netted 90-Day Farm Plan', esc(row.farm_chain) + ' · ' + m2(row.est_cost_90d_usd) + ' 90d · BE FDV ' + mc(row.breakeven_fdv_usd),
         '<p><span class="badge ' + row.verdict.toLowerCase() + '">' + row.verdict + '</span> ' + esc(row.verdict_reason) + '</p>' +
         row.step_meta.map(function (s, i) {
-          return '<div class="step"><span class="n">' + (i + 1) + '</span><div><div>' + esc(stripTrail(s.text)) + '</div><div class="badges"><span class="tag">' + esc(s.cost) + '</span><span class="tag">' + esc(s.time) + '</span></div></div></div>';
+          return '<div class="step"><span class="n">' + (i + 1) + '</span><div><div>' + esc(stripTrail(s.text)) + '</div><div class="badges"><span class="tag">' + esc(s.cost) + '</span> <span class="tag">' + esc(s.time) + '</span></div></div></div>';
         }).join('')) +
       '</div></div>';
     $('modalBackdrop').hidden = false;
@@ -260,11 +261,11 @@
   function openLiveModal(row) {
     var res = (row.resid_log >= 0 ? '+' : '') + row.resid_log.toFixed(2);
     $('modalBody').innerHTML =
-      '<h2>#' + row.rank + ' ' + esc(row.name) + ' ' +
+      modalHead('#' + row.rank + ' ' + esc(row.name) + ' ' +
       (row.symbol ? '<span class="badge ticker">' + esc(row.symbol) + '</span> ' : '') +
-      '<span class="tag">' + esc(row.category) + '</span></h2>' +
-      '<div>' + chainTags(row, 7) + '</div>' +
-      '<div class="why"><h3>Why this comp matters</h3><p>Traded comp that fits the Huber size curve and LOOCV backtest: market cap ' + mc(row.mcap_usd) + ' on ' + mc(row.tvl_usd) + ' TVL (ratio ' + row.mcap_tvl.toFixed(2) + 'x); curve predicts ' + mc(row.pred_usd) + ', residual ' + res + ' log10.</p></div>' +
+      '<span class="tag">' + esc(row.category) + '</span>',
+      chainTags(row, 7), 'Why this comp matters',
+      'Traded comp behind the size curve: mcap ' + mc(row.mcap_usd) + ' on ' + mc(row.tvl_usd) + ' TVL (' + row.mcap_tvl.toFixed(2) + 'x); curve predicts ' + mc(row.pred_usd) + ', residual ' + res + ' log10.') +
       '<div class="stats4">' +
       statCard('Market Cap', mc(row.mcap_usd), '') +
       statCard('Locked TVL', mc(row.tvl_usd), M.pctText(row.change_7d)) +
@@ -289,17 +290,15 @@
     if (state.view === 'live') openLiveModal(row); else openModal(row, list);
   }
 
-  function fillSelect(sel, items, fmt) {
-    items.forEach(function (it) {
-      var o = document.createElement('option');
-      o.value = it.name;
-      o.textContent = fmt(it);
-      sel.appendChild(o);
-    });
+  function fillOpts(sel, opts) {
+    $(sel).innerHTML = opts.map(function (o) { return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>'; }).join('');
   }
 
   function init() {
     var s = D.summary, m = D.model, o = m.launchOddsStats;
+    fillOpts('verdictSel', [['', 'All Verdicts'], ['FARM', 'FARM (Net EV ≥ $2)'], ['THIN', 'THIN (Marginal/Overlap)'], ['SKIP', 'SKIP (Outflow/Negative)']]);
+    fillOpts('growthSel', [['', '7d Growth: Any'], ['pos', 'Positive (> 0%)'], ['strong', 'Strong (≥ +5%)'], ['stable', 'Stable (≥ -10%)']]);
+    fillOpts('sortSel', [['rank', 'Sort: Model Rank'], ['implied', 'Sort: Expected Value'], ['netev', 'Sort: P25 Net EV'], ['tvl', 'Sort: Locked TVL'], ['chg', 'Sort: 7d Growth'], ['cost', 'Sort: 90d Cost'], ['age', 'Sort: Tracked Age']]);
     $('pillDate').textContent = s.as_of;
     $('pillWatch').textContent = s.watchlist_covered + '/' + s.watchlist_total;
     $('kpiWatch').textContent = s.watchlist_covered + '/' + s.watchlist_total;
@@ -313,10 +312,10 @@
     $('countWatch').textContent = String(s.watchlist_covered);
     $('countEarly').textContent = String(s.early_count);
     $('countLive').textContent = String(D.traded.length);
-    $('modelAccuracy').textContent = 'Model check: on held-out traded comps (leave-one-out cross-validation, N=' + m.traded_count + '), the size curve predicts market cap within ' + m.oos_fold_err + 'x, rank correlation ' + m.spearman_rho + ' versus TVL. Launch odds (age by TVL tier, from the snapshot\u2019s launched versus pre-token record) scored ' + o.mean_auc.toFixed(2) + ' AUC held-out.' + (o.flat ? ' No held-out signal, so a flat prior is used for every row.' : '');
+    $('modelAccuracy').textContent = 'Model check: LOOCV N=' + m.traded_count + ', size curve within ' + m.oos_fold_err + 'x (ρ ' + m.spearman_rho + '). Launch odds (age×TVL cells + category + 7d change) ' + o.mean_auc.toFixed(2) + ' AUC held-out.' + (o.flat ? ' Flat prior — no held-out signal.' : '');
     $('footer').textContent = s.source + ' · Floor ' + mc(s.floor_usd) + ' · 100% offline · Shared dashboard/model.js engine · TVL-calibrated ticket Net EV (1k / 5k / 20k dollars)';
-    fillSelect($('sectorSel'), s.top_categories, function (c) { return c.name + ' (' + c.count + ')'; });
-    fillSelect($('chainSel'), s.top_chains, function (c) { return c.name + ' (' + c.count + ')'; });
+    fillOpts('sectorSel', [['', 'All Sectors']].concat(s.top_categories.map(function (c) { return [c.name, c.name + ' (' + c.count + ')']; })));
+    fillOpts('chainSel', [['', 'All Chains']].concat(s.top_chains.map(function (c) { return [c.name, c.name + ' (' + c.count + ')']; })));
     var chips = ['All', 'Ethereum', 'Arbitrum', 'Base', 'Solana', 'Monad', 'Sui'];
     $('chainChips').innerHTML = chips.map(function (c) {
       return '<button class="chip' + (c === 'All' ? ' active' : '') + '" data-chain="' + (c === 'All' ? '' : c) + '">' + c + '</button>';

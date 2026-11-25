@@ -13,7 +13,7 @@ import { buildDossier } from './vendor/makefun-board.ts';
 import './dashboard/model.js';
 
 const MODEL = (globalThis as any).RadarModel;
-const MODEL_VERSION = 'token-radar-v6-sizecurve-loocv-launch-odds-gate';
+const MODEL_VERSION = 'token-radar-v7-sizecurve-loocv-logistic-odds-gate';
 const DASH_FILES = ['index.html', 'app.css', 'app.js', 'model.js'];
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -113,7 +113,7 @@ function boardDocument(snapshot: any, payload: any): any {
       regression: 'Huber iteratively-reweighted power-law size curve with empirical-Bayes sector shrinkage with constant 8, on ' + model.traded_count + ' clean token-family comps.',
       oos_fold_err: model.oos_fold_err,
       spearman_rho: model.spearman_rho,
-      launch_odds: 'Launch odds are the age-bucket by TVL-tier launched share, smoothed toward the global launched share with constant 10, fitted from the snapshot itself; the five-fold held-out AUC is reported in the model statistics under launchOddsStats, and the flat prior is used when the mean AUC is at most 0.5.',
+      launch_odds: 'Launch odds start from the age-bucket by TVL-tier launched share, smoothed toward the global launched share with constant 10, fitted from the snapshot itself; a two-parameter logistic adjustment on the log-odds adds the category launch record (smoothed toward the prior with constant 10) and the winsorized 7-day TVL change (clamped to -20 to +50 percent), fitted by iteratively reweighted least squares with ridge 1; the five-fold held-out AUC is reported in the model statistics under launchOddsStats, and the flat prior is used when the mean AUC is at most 0.5.',
       implied_value: 'Implied value in dollars is the expected value (the size-curve value times the launch odds); rank is by implied value; the size-curve value field keeps the raw size-curve value for display; farm verdicts and the P25 net expected value use the size-curve P25, the value if the token launches.',
       pretoken_filter: 'A protocol is pre-token when its CoinGecko id, its symbol, and its market cap are all absent.'
     },

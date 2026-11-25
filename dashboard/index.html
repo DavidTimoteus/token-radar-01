@@ -8,117 +8,90 @@
 </head>
 <body>
 <div class="shell">
-
-  <header class="card header">
-    <div class="brand">
-      <span class="mark">TR</span>
-      <div>
-        <h1>Token Launch Radar</h1>
-        <p class="subtitle">Empirical Size-Curve Valuation and TVL-Calibrated Net-EV Farming Desk</p>
-      </div>
-    </div>
-    <div class="pills">
-      <span class="pill">Snapshot <b id="pillDate">—</b></span>
-      <span class="pill">Watchlist <b id="pillWatch">—</b></span>
-      <span class="pill">Comps <b>LOOCV N=93</b></span>
-    </div>
-  </header>
-
-  <section class="kpis" id="kpis">
-    <div class="card kpi">
-      <h2>Watchlist Floor Coverage</h2>
-      <div class="kpi-value" id="kpiWatch">—</div>
-      <p>100% of the floor at or above $50M watchlist.</p>
-    </div>
-    <div class="card kpi">
-      <h2>Pre-Token Radar Universe</h2>
-      <div class="kpi-value" id="kpiRows">—</div>
-      <p id="kpiVerdicts">—</p>
-    </div>
-    <div class="card kpi">
-      <h2>Pipeline Value and Aggregate TVL</h2>
-      <div class="kpi-value" id="kpiValue">—</div>
-      <p id="kpiTvl">—</p>
-    </div>
-    <div class="card kpi">
-      <h2>LOOCV Size-Curve Accuracy</h2>
-      <div class="kpi-value" id="kpiFold">—</div>
-      <p id="kpiCurve">—</p>
-    </div>
-  </section>
-
-  <section class="card toolbar">
-    <div class="tabs" id="tabs">
-      <button class="tab active" data-view="radar">Pre-Token Radar <span class="count" id="countRadar">—</span></button>
-      <button class="tab" data-view="watchlist">Watchlist <span class="count" id="countWatch">—</span></button>
-      <button class="tab" data-view="early">Early under $50M <span class="count" id="countEarly">—</span></button>
-      <button class="tab" data-view="live">Traded Comps <span class="count" id="countLive">—</span></button>
-    </div>
-    <div class="controls">
-      <input id="search" type="text" placeholder="Search protocol, sector, chain (/)">
-      <select id="sectorSel"><option value="">All Sectors</option></select>
-      <select id="chainSel"><option value="">All Chains</option></select>
-      <select id="verdictSel">
-        <option value="">All Verdicts</option>
-        <option value="FARM">FARM (Net EV &ge; $2)</option>
-        <option value="THIN">THIN (Marginal/Overlap)</option>
-        <option value="SKIP">SKIP (Outflow/Negative)</option>
-      </select>
-      <select id="growthSel">
-        <option value="">7d Growth: Any</option>
-        <option value="pos">Positive (&gt; 0%)</option>
-        <option value="strong">Strong (&ge; +5%)</option>
-        <option value="stable">Stable (&ge; -10%)</option>
-      </select>
-      <select id="sortSel">
-        <option value="rank">Sort: Model Rank</option>
-        <option value="implied">Sort: Expected Value</option>
-        <option value="netev">Sort: P25 Net EV</option>
-        <option value="tvl">Sort: Locked TVL</option>
-        <option value="chg">Sort: 7d Growth</option>
-        <option value="cost">Sort: 90d Cost</option>
-        <option value="age">Sort: Tracked Age</option>
-      </select>
-    </div>
-    <div class="chips">
-      <span class="chips-label">Liquid Chains:</span>
-      <span id="chainChips"></span>
-      <button id="resetAll" class="reset">Reset All</button>
-    </div>
-  </section>
-
-  <section class="card legend" id="legend">
-    <h2>How to read this board</h2>
-    <p>Rank is by Implied Value. Implied Value equals Expected Value, which is the size-curve value (what a token would be worth at this TVL, fitted from traded comps) times Launch Odds. P25 is the conservative 25th-percentile estimate. Net EV is the P25 airdrop share for the recommended ticket minus the ninety-day farming cost — the P25 value if the token launches.</p>
-    <p><span class="badge farm">FARM</span> means P25 Net EV &ge; $2. <span class="badge thin">THIN</span> means marginal, or check overlap first. <span class="badge skip">SKIP</span> means 7d TVL outflow worse than -10%, TVL under $8M, or P25 Net EV under -$2. Click any row for Why this rank, the full valuation arithmetic, and the farm plan.</p>
-    <p>Launch Odds is the fitted probability that a pre-token protocol has launched a token by the snapshot date, from the snapshot&rsquo;s own launched versus pre-token record by age and TVL tier (a lower-bound proxy — some pre-token protocols may launch later). Implied Value equals Size-Curve Value times Launch Odds; rank is by Implied Value.</p>
-    <p id="modelAccuracy">Model check: loading…</p>
-  </section>
-
-  <div class="banner" id="banner" hidden>
-    <span id="bannerText"></span>
-    <button id="clearFilters" class="reset">Clear Filters</button>
-  </div>
-  <p class="note" id="liveNote" hidden>Clean Token-Family Comps (N=93): deduped by CoinGecko ID, excluding CEX, bridges, liquid staking, and wrapped tokens. Separated from pre-token rankings and used to fit the Huber size curve and LOOCV backtest.</p>
-
-  <section class="card table-wrap">
-    <table id="board">
-      <thead id="boardHead"></thead>
-      <tbody id="boardBody"></tbody>
-    </table>
-    <p class="empty" id="emptyState" hidden>No protocols match the active filter criteria.</p>
-  </section>
-
-  <footer class="card footer" id="footer">—</footer>
+<header class="card header">
+<div class="brand">
+<span class="mark">TR</span>
+<div>
+<h1>Token Launch Radar</h1>
+<p class="subtitle">Empirical Size-Curve Valuation and TVL-Calibrated Net-EV Farming Desk</p>
 </div>
-
+</div>
+<div class="pills">
+<span class="pill">Snapshot <b id="pillDate">—</b></span>
+<span class="pill">Watchlist <b id="pillWatch">—</b></span>
+<span class="pill">Comps <b>LOOCV N=93</b></span>
+</div>
+</header>
+<section class="kpis" id="kpis">
+<div class="card kpi">
+<h2>Watchlist Floor Coverage</h2>
+<div class="kpi-value" id="kpiWatch">—</div>
+<p>100% of the floor at or above $50M watchlist.</p>
+</div>
+<div class="card kpi">
+<h2>Pre-Token Radar Universe</h2>
+<div class="kpi-value" id="kpiRows">—</div>
+<p id="kpiVerdicts">—</p>
+</div>
+<div class="card kpi">
+<h2>Pipeline Value and Aggregate TVL</h2>
+<div class="kpi-value" id="kpiValue">—</div>
+<p id="kpiTvl">—</p>
+</div>
+<div class="card kpi">
+<h2>LOOCV Size-Curve Accuracy</h2>
+<div class="kpi-value" id="kpiFold">—</div>
+<p id="kpiCurve">—</p>
+</div>
+</section>
+<section class="card toolbar">
+<div class="tabs" id="tabs">
+<button class="tab active" data-view="radar">Pre-Token Radar <span class="count" id="countRadar">—</span></button>
+<button class="tab" data-view="watchlist">Watchlist <span class="count" id="countWatch">—</span></button>
+<button class="tab" data-view="early">Early under $50M <span class="count" id="countEarly">—</span></button>
+<button class="tab" data-view="live">Traded Comps <span class="count" id="countLive">—</span></button>
+</div>
+<div class="controls">
+<input id="search" type="text" placeholder="Search protocol, sector, chain (/)">
+<select id="sectorSel"><option value="">All Sectors</option></select>
+<select id="chainSel"><option value="">All Chains</option></select>
+<select id="verdictSel"></select>
+<select id="growthSel"></select>
+<select id="sortSel"></select>
+</div>
+<div class="chips">
+<span class="chips-label">Liquid Chains:</span>
+<span id="chainChips"></span>
+<button id="resetAll" class="reset">Reset All</button>
+</div>
+</section>
+<section class="card legend" id="legend">
+<h2>How to read this board</h2>
+<p>Rank is by Implied Value. Implied Value equals Expected Value, which is the size-curve value (what a token would be worth at this TVL, fitted from traded comps) times Launch Odds. P25 is the conservative 25th-percentile estimate. Net EV is the P25 airdrop share for the recommended ticket minus the 90-day farming cost — the P25 value if the token launches.</p>
+<p><span class="badge farm">FARM</span> FARM means P25 Net EV at least $2. <span class="badge thin">THIN</span> THIN means marginal, or check overlap first. <span class="badge skip">SKIP</span> SKIP means 7d outflow worse than −10%, TVL under $8M, or P25 Net EV under −$2. Click a row for Why this rank, the full valuation arithmetic, and the farm plan.</p>
+<p>Launch Odds is the fitted probability that a pre-token protocol has launched by the snapshot date, from the snapshot&rsquo;s own launched-vs-pre-token record: age×TVL cells, adjusted for the category&rsquo;s launch record and the 7d TVL change. A lower-bound proxy — some pre-token protocols may launch later.</p>
+<p id="modelAccuracy">Model check: loading…</p>
+</section>
+<div class="banner" id="banner" hidden>
+<span id="bannerText"></span>
+<button id="clearFilters" class="reset">Clear Filters</button>
+</div>
+<p class="note" id="liveNote" hidden>Clean Token-Family Comps (N=93): deduped by CoinGecko ID, excluding CEX, bridges, liquid staking, and wrapped tokens. Separated from pre-token rankings and used to fit the Huber size curve and LOOCV backtest.</p>
+<section class="card table-wrap">
+<table id="board">
+<thead id="boardHead"></thead>
+<tbody id="boardBody"></tbody>
+</table>
+<p class="empty" id="emptyState" hidden>No protocols match the active filter criteria.</p>
+</section>
+<footer class="card footer" id="footer">—</footer>
+</div>
 <div class="modal-backdrop" id="modalBackdrop" hidden>
-  <div class="modal">
-    <button class="modal-close" id="modalClose">×</button>
-    <div id="modalBody"></div>
-  </div>
+<div class="modal">
+<button class="modal-close" id="modalClose">×</button>
+<div id="modalBody"></div>
 </div>
-
+</div>
 <script src="../data.js"></script>
 <script src="model.js"></script>
 <script src="app.js"></script>

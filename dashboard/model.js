@@ -16,7 +16,7 @@
   var MID_CHAINS = ['Bitcoin', 'CORE', 'Babylon Genesis', 'BSquared', 'Provenance'];
 
   var EXCLUDED_CATS = ['CEX', 'Bridge', 'Canonical Bridge', 'Liquid Staking', 'Liquid Restaking', 'Restaked BTC'];
-  var EXCHANGES = ['Binance', 'Coinbase', 'Bybit', 'Kraken', 'Bitget', 'OKX', 'Bitfinex', 'Gemini'];
+  var EXCHANGE_RE = /^(Binance|Coinbase|Bybit|Kraken|Bitget|OKX|Bitfinex|Gemini)\b/;
   var VERSION_TAIL = /(?:[Vv]\d+|\d+(?:\.\d+)+)$/;
   var WRAPPED_WORD = /\b(wrapped|staked|staking)\b/i;
 
@@ -44,9 +44,7 @@
 
   function quartileOf(sorted, q) {
     if (sorted.length === 0) return 0;
-    var idx = Math.floor((sorted.length - 1) * q);
-    if (idx > sorted.length - 1) idx = sorted.length - 1;
-    return sorted[idx];
+    return sorted[Math.floor((sorted.length - 1) * q)];
   }
 
   function ranksOf(values) {
@@ -113,7 +111,7 @@
   }
 
   function pctText(v) {
-    if (v === null || v === undefined) return 'N/A';
+    if (v == null) return 'N/A';
     return (v > 0 ? '+' : '') + v.toFixed(2) + '%';
   }
 
@@ -126,15 +124,11 @@
   }
 
   function catOf(p) {
-    return p.category === null || p.category === undefined ? 'Uncategorized' : p.category;
+    return p.category == null ? 'Uncategorized' : p.category;
   }
 
   function startsWithExchange(name) {
-    for (var i = 0; i < EXCHANGES.length; i++) {
-      var re = new RegExp('^' + EXCHANGES[i] + '\\b');
-      if (re.test(name)) return true;
-    }
-    return false;
+    return EXCHANGE_RE.test(name);
   }
 
   function hasWrappedWord(name) {
@@ -143,8 +137,7 @@
 
   function hasVersionTail(name) {
     var m = name.match(/ ([^ ]+)$/);
-    if (!m) return false;
-    return VERSION_TAIL.test(m[1]);
+    return !!m && VERSION_TAIL.test(m[1]);
   }
 
   function isExcludedCat(cat) {
@@ -178,10 +171,10 @@
   }
 
   function feeProfile(chain) {
-    if (chain === 'Ethereum') return { gas: 6.00, bridge: 9.00 };
-    if (CHEAP_CHAINS.indexOf(chain) !== -1) return { gas: 0.03, bridge: 1.10 };
-    if (MID_CHAINS.indexOf(chain) !== -1) return { gas: 2.20, bridge: 4.00 };
-    return { gas: 0.22, bridge: 1.40 };
+    if (chain === 'Ethereum') return { gas: 6, bridge: 9 };
+    if (CHEAP_CHAINS.indexOf(chain) !== -1) return { gas: 0.03, bridge: 1.1 };
+    if (MID_CHAINS.indexOf(chain) !== -1) return { gas: 2.2, bridge: 4 };
+    return { gas: 0.22, bridge: 1.4 };
   }
 
   function isPreToken(p) {
@@ -237,23 +230,11 @@
   }
 
   function solve2(m, v) {
-    var a = [[m[0][0], m[0][1], v[0]], [m[1][0], m[1][1], v[1]]];
-    for (var col = 0; col < 2; col++) {
-      var piv = col;
-      for (var r = col + 1; r < 2; r++) {
-        if (Math.abs(a[r][col]) > Math.abs(a[piv][col])) piv = r;
-      }
-      if (piv !== col) { var tmp = a[col]; a[col] = a[piv]; a[piv] = tmp; }
-      var d = a[col][col];
-      if (Math.abs(d) <= 1e-12) d = 1e-12;
-      for (var j = 0; j < 3; j++) a[col][j] /= d;
-      for (var k = 0; k < 2; k++) {
-        if (k === col) continue;
-        var f = a[k][col];
-        for (var q = 0; q < 3; q++) a[k][q] -= f * a[col][q];
-      }
-    }
-    return [a[0][2], a[1][2]];
+    // Cramer's rule for a 2x2 system. Both callers ridge-regularize,
+    // so the determinant is always positive; the floor only guards a singular input.
+    var det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
+    if (Math.abs(det) <= 1e-12) det = 1e-12;
+    return [(v[0] * m[1][1] - v[1] * m[0][1]) / det, (m[0][0] * v[1] - m[1][0] * v[0]) / det];
   }
 
   function ridgeSolve(points, weights) {
@@ -288,23 +269,17 @@
     var points = comps.map(compPoint);
     var preds = [], resids = [], absRes = [];
     for (var i = 0; i < comps.length; i++) {
-      var rest = [];
-      for (var j = 0; j < comps.length; j++) if (j !== i) rest.push(j);
-      var restPoints = rest.map(function (j) { return points[j]; });
+      var restPoints = points.filter(function (_, j) { return j !== i; });
       var coef = huberFit(restPoints, 12);
       var cat = catOf(comps[i]);
       var same = [];
-      rest.forEach(function (j) {
-        if (catOf(comps[j]) !== cat) return;
-        var r = points[j].y - (coef[0] + coef[1] * points[j].x);
-        same.push(clamp(r, -1, 1));
+      comps.forEach(function (q, j) {
+        if (j === i || catOf(q) !== cat) return;
+        same.push(clamp(points[j].y - (coef[0] + coef[1] * points[j].x), -1, 1));
       });
-      var shrink = 0;
-      if (same.length > 0) {
-        var sum = 0;
-        same.forEach(function (r) { sum += r; });
-        shrink = same.length / (same.length + SHRINK_K) * (sum / same.length);
-      }
+      var shrink = same.length
+        ? same.reduce(function (a, b) { return a + b; }, 0) / (same.length + SHRINK_K)
+        : 0;
       var pred = coef[0] + coef[1] * points[i].x + shrink;
       var resid = points[i].y - pred;
       preds.push(pred);
@@ -326,28 +301,20 @@
   function sectorTable(comps, boardRows, coef) {
     var cats = [];
     var seenCat = {};
-    comps.forEach(function (p) {
-      var c = catOf(p);
-      if (!seenCat[c]) { seenCat[c] = true; cats.push(c); }
-    });
-    boardRows.forEach(function (p) {
+    comps.concat(boardRows).forEach(function (p) {
       var c = catOf(p);
       if (!seenCat[c]) { seenCat[c] = true; cats.push(c); }
     });
     var table = cats.map(function (c) {
       var inCat = comps.filter(function (p) { return catOf(p) === c; });
-      var preCount = boardRows.filter(function (p) { return catOf(p) === c; }).length;
       var weight = inCat.length / (inCat.length + SHRINK_K);
       var clamped = inCat.map(function (p) {
         var pt = compPoint(p);
         return clamp(pt.y - (coef[0] + coef[1] * pt.x), -1, 1);
       });
-      var meanClamped = 0;
-      if (clamped.length > 0) {
-        var s = 0;
-        clamped.forEach(function (r) { s += r; });
-        meanClamped = s / clamped.length;
-      }
+      var meanClamped = clamped.length
+        ? clamped.reduce(function (a, b) { return a + b; }, 0) / clamped.length
+        : 0;
       var resid = clamped.length === 0 ? 0 : weight * meanClamped;
       var residR = roundTo(resid, 4);
       var ratios = inCat.map(function (p) { return p.mcap_usd / p.tvl_usd; });
@@ -355,11 +322,9 @@
       return {
         category: c,
         traded: inCat.length,
-        pretoken: preCount,
         weight: roundTo(weight, 3),
         resid: residR,
-        median: medRatio,
-        mult: roundTo(Math.pow(10, residR), 3)
+        median: medRatio
       };
     });
     return table;
@@ -388,16 +353,11 @@
   }
 
   function ageBucket(age) {
-    if (age < 180) return 0;
-    if (age < 365) return 1;
-    if (age < 730) return 2;
-    return 3;
+    return age < 180 ? 0 : age < 365 ? 1 : age < 730 ? 2 : 3;
   }
 
   function tvlTier(tvl) {
-    if (tvl < 50000000) return 0;
-    if (tvl < 300000000) return 1;
-    return 2;
+    return tvl < 50000000 ? 0 : tvl < 300000000 ? 1 : 2;
   }
 
   function cellIndex(p, asOf) {
@@ -406,23 +366,105 @@
 
   function buildCells(labelled, prior) {
     var cells = [];
-    for (var b = 0; b < 4; b++) {
-      for (var t = 0; t < 3; t++) {
-        var tc = 0, pc = 0;
-        labelled.forEach(function (item) {
-          if (item.cell !== b * 3 + t) return;
-          if (item.launched) tc++; else pc++;
-        });
-        cells.push({
-          bucket: b,
-          tier: t,
-          traded: tc,
-          pretoken: pc,
-          odds: roundTo((tc + prior * SMOOTH_K) / (tc + pc + SMOOTH_K), 4)
-        });
-      }
+    for (var i = 0; i < 12; i++) {
+      cells.push({ bucket: Math.floor(i / 3), tier: i % 3, traded: 0, pretoken: 0, odds: 0 });
     }
+    labelled.forEach(function (item) {
+      var c = cells[item.cell];
+      if (item.launched) c.traded++; else c.pretoken++;
+    });
+    cells.forEach(function (c) {
+      c.odds = roundTo((c.traded + prior * SMOOTH_K) / (c.traded + c.pretoken + SMOOTH_K), 4);
+    });
     return cells;
+  }
+
+  function sigmoid(z) {
+    var c = Math.max(-30, Math.min(30, z));
+    return 1 / (1 + Math.exp(-c));
+  }
+
+  function logit(p) {
+    var c = Math.max(0.001, Math.min(0.999, p));
+    return Math.log(c / (1 - c));
+  }
+
+  // Smoothed launch rate per category, train-only, single pass:
+  // (launched + prior*10) / (n + 10), rounded to 4 decimals.
+  function ratesFor(labelled, prior) {
+    var counts = {};
+    labelled.forEach(function (item) {
+      var c = catOf(item.p);
+      if (counts[c] === undefined) counts[c] = [0, 0];
+      counts[c][0]++;
+      if (item.launched) counts[c][1]++;
+    });
+    var rates = {};
+    Object.keys(counts).forEach(function (c) {
+      rates[c] = roundTo((counts[c][1] + prior * SMOOTH_K) / (counts[c][0] + SMOOTH_K), 4);
+    });
+    return rates;
+  }
+
+  function chgOf(p) {
+    var c = p.change_7d;
+    return c == null ? 0 : c;
+  }
+
+  // Two-parameter logistic adjustment on top of the cell odds:
+  // logit(p) = logit(cell odds) + b1*(category rate - prior)
+  //            + b2*(winsorized 7d change / 10), IRLS 30 rounds, ridge 1.
+  // Cells carry the age x TVL interaction; the adjustment adds what cells
+  // cannot see (category launch record, TVL momentum). Change is
+  // winsorized to [-20, +50]: one frenzy (+4448% exists) cannot zero a row.
+  function fitAdjust(labelled, cells, rates, prior) {
+    var b = [0, 0];
+    var rows = labelled.map(function (item) {
+      return [logit(cells[item.cell].odds), rates[catOf(item.p)] - prior, clamp(chgOf(item.p), -20, 50) / 10, item.launched ? 1 : 0];
+    });
+    for (var it = 0; it < 30; it++) {
+      var s00 = 0, s01 = 0, s11 = 0, t0 = 0, t1 = 0;
+      rows.forEach(function (r) {
+        var xb = r[0] + b[0] * r[1] + b[1] * r[2];
+        var pr = sigmoid(xb);
+        var w = Math.max(pr * (1 - pr), 1e-6);
+        var z = xb + clamp((r[3] - pr) / w, -30, 30);
+        var d = z - r[0];
+        s00 += w * r[1] * r[1];
+        s01 += w * r[1] * r[2];
+        s11 += w * r[2] * r[2];
+        t0 += w * r[1] * d;
+        t1 += w * r[2] * d;
+      });
+      b = solve2([[s00 + 1, s01], [s01, s11 + 1]], [t0, t1]);
+    }
+    return [roundTo(b[0], 4), roundTo(b[1], 4)];
+  }
+
+  // Same formula as fitAdjust, scored with the rounded coefficients and
+  // full-set rates, so the board shows what the model reports.
+  function adjustedOdds(p, cells, adjust, rates, prior, asOf) {
+    var rate = rates[catOf(p)];
+    if (rate === undefined) rate = prior;
+    return sigmoid(logit(cells[cellIndex(p, asOf)].odds)
+      + adjust[0] * (rate - prior)
+      + adjust[1] * clamp(chgOf(p), -20, 50) / 10);
+  }
+
+  function fitOddsModel(labelled, prior, asOf) {
+    var cells = buildCells(labelled, prior);
+    var rates = ratesFor(labelled, prior);
+    return { cells: cells, adjust: fitAdjust(labelled, cells, rates, prior), rates: rates };
+  }
+
+  function oddsAuc(model, test, prior, asOf) {
+    var pos = [], neg = [];
+    test.forEach(function (item) {
+      var odds = adjustedOdds(item.p, model.cells, model.adjust, model.rates, prior, asOf);
+      if (item.launched) pos.push(odds); else neg.push(odds);
+    });
+    if (pos.length === 0 || neg.length === 0) return null;
+    return pairAuc(pos, neg);
   }
 
   function fitLaunchOdds(snapshot, comps, pretoken) {
@@ -431,8 +473,7 @@
     var labelled = [];
     comps.forEach(function (p) { labelled.push({ p: p, cell: cellIndex(p, asOf), launched: true }); });
     pretoken.forEach(function (p) { labelled.push({ p: p, cell: cellIndex(p, asOf), launched: false }); });
-    var cells = buildCells(labelled, prior);
-
+    var full = fitOddsModel(labelled, prior, asOf);
     var sorted = labelled.slice().sort(function (a, b) {
       return a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0;
     });
@@ -442,14 +483,8 @@
       sorted.forEach(function (item, i) {
         if (i % 5 === f) test.push(item); else train.push(item);
       });
-      var trainCells = buildCells(train, prior);
-      var pos = [], neg = [];
-      test.forEach(function (item) {
-        var odds = trainCells[item.cell].odds;
-        if (item.launched) pos.push(odds); else neg.push(odds);
-      });
-      if (pos.length === 0 || neg.length === 0) continue;
-      foldScores.push(pairAuc(pos, neg));
+      var auc = oddsAuc(fitOddsModel(train, prior, asOf), test, prior, asOf);
+      if (auc !== null) foldScores.push(auc);
     }
     var meanAuc = 0;
     if (foldScores.length > 0) {
@@ -466,14 +501,15 @@
       traded: comps.length,
       pretoken: pretoken.length,
       cells: flat
-        ? cells.map(function (c) { return { bucket: c.bucket, tier: c.tier, traded: 0, pretoken: 0, odds: prior }; })
-        : cells
+        ? full.cells.map(function (c) { return { bucket: c.bucket, tier: c.tier, traded: 0, pretoken: 0, odds: prior }; })
+        : full.cells,
+      adjust: flat ? [0, 0] : full.adjust,
+      categoryRates: full.rates
     };
   }
 
-  function velocityMult(change7d) {
-    var chg = change7d === null || change7d === undefined ? 0 : change7d;
-    return 1 + clamp(chg / 100 * 0.4, -0.22, 0.38);
+  function velocityMult(p) {
+    return 1 + clamp(chgOf(p) / 100 * 0.4, -0.22, 0.38);
   }
 
   function ageMult(age) {
@@ -482,13 +518,12 @@
 
   function pickFarmChain(chains) {
     var sorted = chains.length > 0 ? sortChains(chains) : ['Ethereum'];
+    var l2 = null;
     for (var i = 0; i < sorted.length; i++) {
       if (CHEAP_CHAINS.indexOf(sorted[i]) !== -1) return sorted[i];
+      if (l2 === null && L2_CHAINS.indexOf(sorted[i]) !== -1) l2 = sorted[i];
     }
-    for (var j = 0; j < sorted.length; j++) {
-      if (L2_CHAINS.indexOf(sorted[j]) !== -1) return sorted[j];
-    }
-    return sorted[0];
+    return l2 || sorted[0];
   }
 
   function ticketFor(tvl) {
@@ -508,11 +543,11 @@
 
   function stepPattern(category) {
     var c = category || '';
-    if (c.indexOf('Curator') !== -1 || c.indexOf('Allocator') !== -1 || c.indexOf('Yield') !== -1) return 'vault';
-    if (c.indexOf('Derivatives') !== -1 || c.indexOf('Prediction') !== -1 || c.indexOf('Options') !== -1) return 'margin';
-    if (c.indexOf('Dexs') !== -1 || c.indexOf('Liquidity') !== -1) return 'lp';
-    if (c.indexOf('Lending') !== -1 || c.indexOf('CDP') !== -1 || c.indexOf('Collateral') !== -1) return 'lend';
-    if (c.indexOf('RWA') !== -1 || c.indexOf('Basis') !== -1 || c.indexOf('CeDeFi') !== -1 || c.indexOf('Payments') !== -1) return 'receipt';
+    if (/Curator|Allocator|Yield/.test(c)) return 'vault';
+    if (/Derivatives|Prediction|Options/.test(c)) return 'margin';
+    if (/Dexs|Liquidity/.test(c)) return 'lp';
+    if (/Lending|CDP|Collateral/.test(c)) return 'lend';
+    if (/RWA|Basis|CeDeFi|Payments/.test(c)) return 'receipt';
     return 'default';
   }
 
@@ -538,54 +573,9 @@
     return 'Bi-weekly organic activity on ' + name + ' on ' + secondChain + ' across six snapshots.';
   }
 
-  function buildFarmPlan(row, econ) {
-    var steps = [], meta = [];
-    var fee = feeProfile(econ.farmChain);
-    if (row.verdict === 'SKIP') {
-      var gateText = 'Skip gate: ' + row.verdict_reason + ' Cap any test at $150 or defer.';
-      steps.push(gateText);
-      meta.push({ text: gateText, cost: '$0 gate', time: '3 min check', gas: 0 });
-    }
-    var kind = stepPattern(row.category);
-    var first = firstStepText(kind, row, econ.ticket, econ.farmChain);
-    steps.push(first);
-    meta.push({
-      text: first,
-      cost: money2(econ.setupGas) + ' setup + ' + ticketK(econ.ticket) + ' ticket',
-      time: '10 min setup',
-      gas: econ.setupGas
-    });
-    var second = secondStepText(kind, row, econ.secondChain);
-    steps.push(second);
-    var cycleGas = roundTo(fee.gas * 5, 2);
-    meta.push({
-      text: second,
-      cost: money2(cycleGas) + ' cycles',
-      time: '5 min bi-weekly',
-      gas: cycleGas
-    });
-    var hold = 'Hold 90 days \u2192 tracked ' + row.age_days + 'd, ' + moneyFull(econ.ticket) +
-      ' ticket, P25 rec ' + money2(econ.p25Rec) + ', mid rec ' + money2(econ.midRec) +
-      ', net ' + signedMoney(econ.netEvP25) + ', min deposit ' + depositText(econ.minDeposit) +
-      ', break-even FDV ' + moneyCompact(econ.breakevenFdv) + '.';
-    steps.push(hold);
-    meta.push({
-      text: hold,
-      cost: money2(fee.gas) + ' exit',
-      time: '2 min / week',
-      gas: fee.gas
-    });
-    if (steps.length < 4) {
-      var close = 'Claim ' + row.name + '\u2019s epoch badges and revoke stale approvals on ' + econ.farmChain + '.';
-      steps.push(close);
-      meta.push({
-        text: close,
-        cost: money2(fee.gas) + ' revoke',
-        time: '4 min exit',
-        gas: fee.gas
-      });
-    }
-    return { steps: steps, meta: meta };
+  function pushStep(steps, meta, text, cost, time, gas) {
+    steps.push(text);
+    meta.push({ text: text, cost: cost, time: time, gas: gas });
   }
 
   function scoreProtocol(p, model, oddsModel, sectorByCat, watchSet) {
@@ -595,7 +585,7 @@
     var logTvl = Math.log10(tvl);
     var sizeBase = Math.pow(10, model.intercept + model.slope * logTvl);
     var sectorBase = sizeBase * Math.pow(10, sec.resid);
-    var vel = velocityMult(p.change_7d);
+    var vel = velocityMult(p);
     var age = ageDays(p.listed_at, model.as_of);
     var aMult = ageMult(age);
     var raw = sectorBase * vel * aMult;
@@ -621,14 +611,8 @@
     var minDeposit = Math.ceil(cost90 * floor / Math.max(1, p25v * 0.05));
     var breakeven = Math.round(cost90 * floor / (ticket * 0.05));
 
-    var econ = {
-      farmChain: farmChain, secondChain: secondChain, setupGas: setupGas,
-      cost90: cost90, ticket: ticket, p25Rec: p25Rec, midRec: midRec,
-      netEvP25: netP25, netEvMid: netMid, minDeposit: minDeposit, breakevenFdv: breakeven
-    };
-
     var verdict = 'THIN';
-    var chg = p.change_7d === null || p.change_7d === undefined ? 0 : p.change_7d;
+    var chg = chgOf(p);
     var reason = 'P25 net EV ' + signedMoney(netP25) + ' on a ' + ticketK(ticket) +
       ' ticket via ' + farmChain + '; min deposit ' + moneyFull(minDeposit) + '.';
     if (chg < -10) {
@@ -651,7 +635,8 @@
         ticketK(ticket) + ' ticket via ' + farmChain + ' after ' + money2(cost90) + ' 90d cost.';
     }
 
-    var cellOdds = oddsModel.flat ? oddsModel.prior : oddsModel.cells[cellIndex(p, model.as_of)].odds;
+    var cellOdds = oddsModel.flat ? oddsModel.prior
+      : adjustedOdds(p, oddsModel.cells, oddsModel.adjust, oddsModel.categoryRates, oddsModel.prior, model.as_of);
     var odds4 = clamp(cellOdds, 0.02, 0.95);
     var expected = Math.max(1, Math.round(rawR * odds4));
     var expectedP25 = Math.max(1, Math.round(p25v * odds4));
@@ -664,8 +649,8 @@
       chains: chains,
       farm_chain: farmChain,
       tvl_usd: tvl,
-      change_7d: p.change_7d === undefined ? null : p.change_7d,
-      listed_at: p.listed_at === undefined ? null : p.listed_at,
+      change_7d: p.change_7d == null ? null : p.change_7d,
+      listed_at: p.listed_at == null ? null : p.listed_at,
       in_watchlist: !!watchSet[p.slug],
       verdict: verdict,
       verdict_reason: reason,
@@ -704,9 +689,28 @@
       farm_steps: [],
       step_meta: []
     };
-    var plan = buildFarmPlan(row, econ);
-    row.farm_steps = plan.steps;
-    row.step_meta = plan.meta;
+    // Farm plan (SPEC section 10): numbered steps, each with cost and time.
+    var steps = [], meta = [];
+    if (verdict === 'SKIP') {
+      pushStep(steps, meta, 'Skip gate: ' + reason + ' Cap any test at $150 or defer.', '$0 gate', '3 min check', 0);
+    }
+    var kind = stepPattern(cat);
+    var first = firstStepText(kind, row, ticket, farmChain);
+    pushStep(steps, meta, first, money2(setupGas) + ' setup + ' + ticketK(ticket) + ' ticket', '10 min setup', setupGas);
+    var second = secondStepText(kind, row, secondChain);
+    var cycleGas = roundTo(fee.gas * 5, 2);
+    pushStep(steps, meta, second, money2(cycleGas) + ' cycles', '5 min bi-weekly', cycleGas);
+    var hold = 'Hold 90 days \u2192 tracked ' + age + 'd, ' + moneyFull(ticket) +
+      ' ticket, P25 rec ' + money2(p25Rec) + ', mid rec ' + money2(midRec) +
+      ', net ' + signedMoney(netP25) + ', min deposit ' + depositText(minDeposit) +
+      ', break-even FDV ' + moneyCompact(breakeven) + '.';
+    pushStep(steps, meta, hold, money2(fee.gas) + ' exit', '2 min / week', fee.gas);
+    if (verdict !== 'SKIP') {
+      pushStep(steps, meta, 'Risk check: if 7d TVL drops 10% or the verdict flips to SKIP, halve the ' + moneyFull(ticket) + ' ticket and exit the rest within a week.', money2(fee.gas) + ' exit', '5 min weekly', fee.gas);
+      pushStep(steps, meta, 'Claim ' + p.name + '\u2019s epoch badges and revoke stale approvals on ' + farmChain + '.', money2(fee.gas) + ' revoke', '4 min exit', fee.gas);
+    }
+    row.farm_steps = steps;
+    row.step_meta = meta;
     row._ev = expected;
     return row;
   }
@@ -749,8 +753,8 @@
         mcap_tvl: roundTo(p.mcap_usd / p.tvl_usd, 3),
         pred_usd: Math.round(Math.pow(10, logPred)),
         resid_log: roundTo(Math.log10(p.mcap_usd) - logPred, 3),
-        change_7d: p.change_7d === undefined ? null : p.change_7d,
-        listed_at: p.listed_at === undefined ? null : p.listed_at
+        change_7d: p.change_7d == null ? null : p.change_7d,
+        listed_at: p.listed_at == null ? null : p.listed_at
       };
     });
   }
@@ -772,6 +776,7 @@
   function buildSummary(snapshot, rows) {
     var aggImplied = 0, aggTvl = 0;
     var farm = 0, thin = 0, skip = 0, early = 0, covered = 0;
+    var chainRows = [];
     rows.forEach(function (r) {
       aggImplied += r.implied_value_usd;
       aggTvl += r.tvl_usd;
@@ -780,9 +785,6 @@
       else skip++;
       if (r.tvl_usd < WATCH_FLOOR) early++;
       if (r.in_watchlist) covered++;
-    });
-    var chainRows = [];
-    rows.forEach(function (r) {
       r.chains.forEach(function (c) { chainRows.push(c); });
     });
     return {
@@ -832,12 +834,12 @@
   }
 
   globalThis.RadarModel = {
-    roundTo, clamp, medianOf, quartileOf, rankCorr, pairAuc,
-    moneyCompact, moneyFull, money2, pctText, signedMoney, escHtml,
-    groupInt, depositText, catOf, ageDays, sortChains, feeProfile,
-    cleanComps, boardUniverse, oddsFitSet, huberFit, compPoint,
-    looBacktest, sectorTable, fitSizeCurve, fitLaunchOdds, cellIndex,
-    buildCells, scoreProtocol, rankRows, tradedList, buildSummary,
-    buildPayload, CHAIN_ORDER, CHEAP_CHAINS, L2_CHAINS, MID_CHAINS
+    buildPayload, fitLaunchOdds, fitSizeCurve, cleanComps, boardUniverse,
+    oddsFitSet, escHtml, moneyCompact, moneyFull, money2, pctText,
+    signedMoney, depositText,
+    // Helpers the backtest experiments use (kept exported so the
+    // experiment scripts stay runnable against this file).
+    roundTo, clamp, medianOf, quartileOf, rankCorr, pairAuc, catOf,
+    ageDays, cellIndex, buildCells, scoreProtocol
   };
 })();
